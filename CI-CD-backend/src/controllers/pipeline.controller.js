@@ -249,6 +249,165 @@ export const deletePipeline = async (req, res) => {
 };
 
 // ======================================
+// Execute Pipeline Job (Background)
+// ======================================
+export const executePipelineJob = async (pipelineId) => {
+  try {
+    const pipeline = await Pipeline.findById(pipelineId);
+    if (!pipeline) return;
+    
+    const repository = await Repository.findById(pipeline.repository);
+    if (!repository) return;
+
+    // Define log streamer callback
+    const onLog = (logMessage) => {
+      try {
+        getIO().emit("pipeline_log", {
+          id: pipeline._id,
+          log: logMessage.trim()
+        });
+      } catch (err) {}
+    };
+
+    try {
+      onLog(`[INFO] Initializing pipeline runner for ${repository.name}...`);
+      
+      // Clone GitHub Repository (use pipeline branch, fallback to repo branch)
+      const branchToClone = pipeline.branch || repository.branch || "main";
+      const projectPath = await cloneRepository(repository.githubUrl, repository.name, branchToClone, onLog);
+
+      // Build Project
+      const logs = await buildProject(projectPath, pipeline.buildCommand, onLog);
+
+      // Docker Image Build (optional — skips if Docker is not running or if deployment Target is not docker)
+      let dockerLogs = "Docker build skipped (Direct EC2 deployment).";
+      
+      if (pipeline.deploymentTarget === "docker") {
+        const imageName = `${repository.name.toLowerCase().replace(/\s+/g, "-")}:latest`;
+        try {
+          dockerLogs = await buildDockerImage(projectPath, imageName, pipeline.dockerfilePath, onLog);
+        } catch (dockerError) {
+          logger.warn("⚠️ Docker build failed (Docker may not be running):", dockerError.message || dockerError);
+          dockerLogs = `Docker build skipped: ${dockerError.message || "Docker daemon not available"}`;
+          onLog(`[ERROR] Docker build failed: ${dockerError.message || "Daemon not available"}`);
+        }
+      } else {
+         onLog(`[DEPLOY] Starting real SSH deployment to EC2...`);
+         
+         let publicIp = null;
+         // 1. Fetch real EC2 IP
+         if (pipeline.cloudAccount && pipeline.ec2InstanceId) {
+           try {
+             onLog(`[DEPLOY] Fetching EC2 instance details...`);
+             const cloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+             if (cloudAccount && cloudAccount.provider === "AWS") {
+               const ec2Client = new EC2Client({
+                 region: cloudAccount.region,
+                 credentials: {
+                   accessKeyId: cloudAccount.accessKeyId,
+                   secretAccessKey: cloudAccount.secretAccessKey,
+                 },
+               });
+               const data = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+               if (data.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress) {
+                 publicIp = data.Reservations[0].Instances[0].PublicIpAddress;
+                 pipeline.deployedUrl = `http://${publicIp}:${pipeline.appPort || 5003}`;
+               }
+             }
+           } catch (err) {
+             onLog(`[ERROR] Could not fetch EC2 Public IP: ${err.message}`);
+             logger.warn("Could not fetch EC2 Public IP:", err);
+           }
+         }
+
+         if (!publicIp) {
+           throw new Error("Failed to resolve EC2 Public IP. Cannot connect via SSH.");
+         }
+
+         onLog(`[DEPLOY] Resolved IP: ${publicIp}. Connecting via SSH...`);
+
+         // 2. SSH Connection
+         const ssh = new NodeSSH();
+         const sshKeyPath = process.env.EC2_SSH_KEY_PATH;
+         const sshUsername = process.env.EC2_USERNAME || 'ubuntu';
+
+         if (!sshKeyPath) {
+           throw new Error("EC2_SSH_KEY_PATH is not defined in backend .env");
+         }
+
+         try {
+           await ssh.connect({
+             host: publicIp,
+             username: sshUsername,
+             privateKeyPath: sshKeyPath,
+           });
+           onLog(`[DEPLOY] SSH Connection established ✓`);
+
+           // Helper for running SSH commands
+           const runSSH = async (cmd) => {
+             onLog(`[EC2] $ ${cmd}`);
+             const result = await ssh.execCommand(cmd, { cwd: `/home/${sshUsername}` });
+             if (result.stdout) onLog(result.stdout);
+             if (result.stderr) onLog(result.stderr);
+             return result;
+           };
+
+           const repoName = repository.name.replace(/\s+/g, '-');
+           const targetDir = `/home/${sshUsername}/${repoName}`;
+
+           // 3. Clone or Pull
+           onLog(`[DEPLOY] Syncing repository...`);
+           const checkDir = await ssh.execCommand(`[ -d "${targetDir}" ] && echo "exists" || echo "missing"`, { cwd: `/home/${sshUsername}` });
+           
+           if (checkDir.stdout.trim() === 'exists') {
+             await runSSH(`cd ${targetDir} && git pull`);
+           } else {
+             await runSSH(`git clone ${repository.githubUrl} ${repoName}`);
+           }
+
+           // 4. Install Dependencies
+           onLog(`[DEPLOY] Installing dependencies...`);
+           await runSSH(`cd ${targetDir} && npm install`);
+
+           // 5. Start Application (using PM2 if available, or fallback to node)
+           onLog(`[DEPLOY] Starting application on port ${pipeline.appPort || 5003}...`);
+           // Setting PORT env for the app
+           const startCmd = `export PORT=${pipeline.appPort || 5003} && (pm2 restart ${repoName} || pm2 start npm --name "${repoName}" -- start || nohup npm start > app.log 2>&1 &)`;
+           await runSSH(`cd ${targetDir} && ${startCmd}`);
+
+           onLog(`[DEPLOY] Application is live at ${pipeline.deployedUrl}`);
+           onLog(`[DEPLOY] Deployment successful ✓`);
+           
+         } catch (sshError) {
+           onLog(`[ERROR] SSH Deployment Failed: ${sshError.message}`);
+           throw sshError;
+         } finally {
+           ssh.dispose();
+         }
+      }
+      // Update Status
+      pipeline.status = "success";
+      await pipeline.save();
+
+      try {
+        onLog(`[SUCCESS] Pipeline execution finished 🎉`);
+        getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "success" });
+      } catch (err) {}
+    } catch (error) {
+      pipeline.status = "failed";
+      await pipeline.save();
+      try {
+        onLog(`[ERROR] Pipeline execution failed: ${error.message || error}`);
+        getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "failed" });
+      } catch (err) {}
+      logger.error("Async pipeline execution failed:", error);
+    }
+  } catch (err) {
+    logger.error("Failed to execute pipeline job:", err);
+  }
+};
+
+// ======================================
 // Trigger Pipeline
 // ======================================
 export const triggerPipeline = async (req, res) => {
@@ -288,151 +447,7 @@ export const triggerPipeline = async (req, res) => {
     }
 
     // Since this is a long-running process, we'll run it asynchronously without blocking the response
-    (async () => {
-      // Define log streamer callback
-      const onLog = (logMessage) => {
-        try {
-          getIO().emit("pipeline_log", {
-            id: pipeline._id,
-            log: logMessage.trim()
-          });
-        } catch (err) {}
-      };
-
-      try {
-        onLog(`[INFO] Initializing pipeline runner for ${repository.name}...`);
-        
-        // Clone GitHub Repository (use pipeline branch, fallback to repo branch)
-        const branchToClone = pipeline.branch || repository.branch || "main";
-        const projectPath = await cloneRepository(repository.githubUrl, repository.name, branchToClone, onLog);
-
-        // Build Project
-        const logs = await buildProject(projectPath, pipeline.buildCommand, onLog);
-
-        // Docker Image Build (optional — skips if Docker is not running or if deployment Target is not docker)
-        let dockerLogs = "Docker build skipped (Direct EC2 deployment).";
-        
-        if (pipeline.deploymentTarget === "docker") {
-          const imageName = `${repository.name.toLowerCase().replace(/\s+/g, "-")}:latest`;
-          try {
-            dockerLogs = await buildDockerImage(projectPath, imageName, pipeline.dockerfilePath, onLog);
-          } catch (dockerError) {
-            logger.warn("⚠️ Docker build failed (Docker may not be running):", dockerError.message || dockerError);
-            dockerLogs = `Docker build skipped: ${dockerError.message || "Docker daemon not available"}`;
-            onLog(`[ERROR] Docker build failed: ${dockerError.message || "Daemon not available"}`);
-          }
-        } else {
-           onLog(`[DEPLOY] Starting real SSH deployment to EC2...`);
-           
-           let publicIp = null;
-           // 1. Fetch real EC2 IP
-           if (pipeline.cloudAccount && pipeline.ec2InstanceId) {
-             try {
-               onLog(`[DEPLOY] Fetching EC2 instance details...`);
-               const cloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
-               if (cloudAccount && cloudAccount.provider === "AWS") {
-                 const ec2Client = new EC2Client({
-                   region: cloudAccount.region,
-                   credentials: {
-                     accessKeyId: cloudAccount.accessKeyId,
-                     secretAccessKey: cloudAccount.secretAccessKey,
-                   },
-                 });
-                 const data = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
-                 if (data.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress) {
-                   publicIp = data.Reservations[0].Instances[0].PublicIpAddress;
-                   pipeline.deployedUrl = `http://${publicIp}:${pipeline.appPort || 5003}`;
-                 }
-               }
-             } catch (err) {
-               onLog(`[ERROR] Could not fetch EC2 Public IP: ${err.message}`);
-               logger.warn("Could not fetch EC2 Public IP:", err);
-             }
-           }
-
-           if (!publicIp) {
-             throw new Error("Failed to resolve EC2 Public IP. Cannot connect via SSH.");
-           }
-
-           onLog(`[DEPLOY] Resolved IP: ${publicIp}. Connecting via SSH...`);
-
-           // 2. SSH Connection
-           const ssh = new NodeSSH();
-           const sshKeyPath = process.env.EC2_SSH_KEY_PATH;
-           const sshUsername = process.env.EC2_USERNAME || 'ubuntu';
-
-           if (!sshKeyPath) {
-             throw new Error("EC2_SSH_KEY_PATH is not defined in backend .env");
-           }
-
-           try {
-             await ssh.connect({
-               host: publicIp,
-               username: sshUsername,
-               privateKeyPath: sshKeyPath,
-             });
-             onLog(`[DEPLOY] SSH Connection established ✓`);
-
-             // Helper for running SSH commands
-             const runSSH = async (cmd) => {
-               onLog(`[EC2] $ ${cmd}`);
-               const result = await ssh.execCommand(cmd, { cwd: `/home/${sshUsername}` });
-               if (result.stdout) onLog(result.stdout);
-               if (result.stderr) onLog(result.stderr);
-               return result;
-             };
-
-             const repoName = repository.name.replace(/\s+/g, '-');
-             const targetDir = `/home/${sshUsername}/${repoName}`;
-
-             // 3. Clone or Pull
-             onLog(`[DEPLOY] Syncing repository...`);
-             const checkDir = await ssh.execCommand(`[ -d "${targetDir}" ] && echo "exists" || echo "missing"`, { cwd: `/home/${sshUsername}` });
-             
-             if (checkDir.stdout.trim() === 'exists') {
-               await runSSH(`cd ${targetDir} && git pull`);
-             } else {
-               await runSSH(`git clone ${repository.githubUrl} ${repoName}`);
-             }
-
-             // 4. Install Dependencies
-             onLog(`[DEPLOY] Installing dependencies...`);
-             await runSSH(`cd ${targetDir} && npm install`);
-
-             // 5. Start Application (using PM2 if available, or fallback to node)
-             onLog(`[DEPLOY] Starting application on port ${pipeline.appPort || 5003}...`);
-             // Setting PORT env for the app
-             const startCmd = `export PORT=${pipeline.appPort || 5003} && (pm2 restart ${repoName} || pm2 start npm --name "${repoName}" -- start || nohup npm start > app.log 2>&1 &)`;
-             await runSSH(`cd ${targetDir} && ${startCmd}`);
-
-             onLog(`[DEPLOY] Application is live at ${pipeline.deployedUrl}`);
-             onLog(`[DEPLOY] Deployment successful ✓`);
-             
-           } catch (sshError) {
-             onLog(`[ERROR] SSH Deployment Failed: ${sshError.message}`);
-             throw sshError;
-           } finally {
-             ssh.dispose();
-           }
-        }
-        // Update Status
-        pipeline.status = "success";
-        await pipeline.save();
-
-        try {
-          onLog(`[SUCCESS] Pipeline execution finished 🎉`);
-          getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "success" });
-        } catch (err) {}
-      } catch (error) {
-        pipeline.status = "failed";
-        await pipeline.save();
-        try {
-          onLog(`[ERROR] Pipeline execution failed: ${error.message || error}`);
-          getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "failed" });
-        } catch (err) {}
-        logger.error("Async pipeline execution failed:", error);
-      }
-    })();
+    executePipelineJob(pipeline._id);
 
     return res.status(200).json({
       success: true,

@@ -8,7 +8,8 @@ import {
   connectGithub,
   disconnectGithub,
   getRepositories,
-  getBranches
+  getBranches,
+  handleWebhook
 } from "../controllers/github.controller.js";
 
 const router = express.Router();
@@ -23,5 +24,8 @@ router.post("/connect", protect, connectGithub);
 router.delete("/disconnect", protect, disconnectGithub);
 router.get("/repositories", protect, getRepositories);
 router.get("/repositories/:owner/:repo/branches", protect, getBranches);
+
+// GitHub Webhook Route (Unprotected because GitHub calls it)
+router.post("/webhook", handleWebhook);
 
 export default router;

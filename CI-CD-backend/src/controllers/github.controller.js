@@ -1,6 +1,9 @@
 import logger from "../config/logger.js";
 import axios from "axios";
 import User from "../models/user.model.js";
+import Pipeline from "../models/pipeline.model.js";
+import Repository from "../models/repository.model.js";
+import { executePipelineJob } from "./pipeline.controller.js";
 
 export const getGitHubActionsRuns = async (req, res) => {
   try {
@@ -136,7 +139,7 @@ export const getAuthUrl = (req, res) => {
     return res.status(500).json({ success: false, message: "Please configure GITHUB_CLIENT_ID in your backend .env file and RESTART the server." });
   }
   const redirectUri = `${FRONTEND_URL}/repositories`;
-  const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${redirectUri}&scope=repo,user`;
+  const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${redirectUri}&scope=repo,user&prompt=consent`;
   return res.status(200).json({ success: true, url });
 };
 
@@ -197,7 +200,94 @@ export const disconnectGithub = async (req, res) => {
     return res.status(200).json({ success: true, message: "GitHub disconnected successfully" });
   } catch (error) {
     logger.error("DISCONNECT GITHUB ERROR:", error);
-    return res.status(500).json({ success: false, message: "Failed to disconnect GitHub" });
+    res.status(500).json({ success: false, message: "Failed to disconnect GitHub" });
+  }
+};
+
+// ======================================
+// GitHub Webhook Listener
+// ======================================
+export const handleWebhook = async (req, res) => {
+  try {
+    const event = req.headers["x-github-event"];
+    logger.info(`Received GitHub Webhook Event: ${event}`);
+
+    // Immediately respond to GitHub to prevent timeouts
+    res.status(200).json({ received: true });
+
+    // Only process push events
+    if (event !== "push") return;
+
+    const payload = req.body;
+    const repositoryName = payload.repository?.full_name; // e.g. "kunalkumar563/cloud-orchestrator"
+    let branch = payload.ref; // e.g. "refs/heads/main"
+
+    if (!repositoryName || !branch) {
+      logger.warn("Webhook payload missing repository name or branch ref.");
+      return;
+    }
+
+    // Clean up branch name ("refs/heads/main" -> "main")
+    branch = branch.replace("refs/heads/", "");
+
+    logger.info(`Webhook details - Repo: ${repositoryName}, Branch: ${branch}`);
+
+    // Find our database Repository by matching the name
+    // Since users enter URLs like https://github.com/owner/repo.git, we use regex to match the end of the URL
+    const repos = await Repository.find({ 
+      $or: [
+        { githubUrl: { $regex: new RegExp(`${repositoryName}(\\.git)?$`, 'i') } },
+        { name: { $regex: new RegExp(repositoryName.split('/').pop(), 'i') } }
+      ]
+    });
+
+    if (repos.length === 0) {
+      logger.info(`No tracked repository matches: ${repositoryName}`);
+      return;
+    }
+
+    const repoIds = repos.map(r => r._id);
+
+    // Find all Pipelines linked to these repositories that should track this branch
+    const pipelines = await Pipeline.find({
+      repository: { $in: repoIds },
+      $or: [
+        { branch: branch },
+        { branch: { $exists: false } },
+        { branch: "" }
+      ]
+    });
+
+    if (pipelines.length === 0) {
+      logger.info(`No pipelines configured for ${repositoryName} on branch ${branch}`);
+      return;
+    }
+
+    logger.info(`Found ${pipelines.length} pipelines to auto-trigger for ${repositoryName} (${branch})`);
+
+    // Trigger execution for each matching pipeline asynchronously
+    for (const pipeline of pipelines) {
+      logger.info(`Auto-triggering Pipeline ID: ${pipeline._id}`);
+      
+      // Update status to running before calling execute
+      pipeline.status = "running";
+      await pipeline.save();
+
+      // Trigger socket event
+      try {
+        const { getIO } = await import("../config/socket.js");
+        getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "running" });
+      } catch (e) {}
+
+      // Fire and forget
+      executePipelineJob(pipeline._id).catch(err => {
+        logger.error(`Webhook Auto-Deploy failed for Pipeline ${pipeline._id}:`, err);
+      });
+    }
+
+  } catch (error) {
+    logger.error("Error processing GitHub Webhook:", error);
+    // Don't send 500 because we already sent 200 at the beginning
   }
 };
 
