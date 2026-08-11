@@ -4,6 +4,7 @@ import {
   getCloudAccounts,
   updateCloudAccount,
   deleteCloudAccount,
+  getAwsResources,
 } from "../controllers/cloudAccount.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
@@ -25,5 +26,8 @@ router.put("/:id", authorize("admin", "developer"), updateCloudAccount);
 
 // Delete a cloud account (Admin only)
 router.delete("/:id", authorize("admin"), deleteCloudAccount);
+
+// Fetch AWS resources for testing/display
+router.get("/:id/resources/aws", authorize("admin", "developer", "viewer"), getAwsResources);
 
 export default router;

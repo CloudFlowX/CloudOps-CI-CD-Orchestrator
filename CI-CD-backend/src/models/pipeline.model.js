@@ -57,6 +57,27 @@ const pipelineSchema = new mongoose.Schema(
       default: null,
     },
 
+    cloudAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CloudAccount",
+      default: null,
+    },
+
+    ec2InstanceId: {
+      type: String,
+      default: "",
+    },
+
+    appPort: {
+      type: Number,
+      default: 3000,
+    },
+
+    deployedUrl: {
+      type: String,
+      default: "",
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

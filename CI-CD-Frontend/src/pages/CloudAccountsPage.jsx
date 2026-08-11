@@ -45,6 +45,10 @@ export default function CloudAccountsPage() {
   // Modal State
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [selectedAwsAccount, setSelectedAwsAccount] = useState(null);
+  const [awsResources, setAwsResources] = useState({ instances: [], vpcs: [] });
+  const [loadingResources, setLoadingResources] = useState(false);
+
   const [newAccount, setNewAccount] = useState({
     provider: "AWS",
     accountName: "",
@@ -86,6 +90,23 @@ export default function CloudAccountsPage() {
       showToast("Failed to load cloud accounts", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAwsResources = async (accountId) => {
+    try {
+      setSelectedAwsAccount(accountId);
+      setLoadingResources(true);
+      const res = await ApiClient.get(`/cloud-accounts/${accountId}/resources/aws`);
+      if (res.success) {
+        setAwsResources(res.resources);
+      }
+    } catch (error) {
+      console.error(error);
+      showToast(error?.data?.message || "Failed to fetch AWS resources", "error");
+      setSelectedAwsAccount(null);
+    } finally {
+      setLoadingResources(false);
     }
   };
 
@@ -266,8 +287,18 @@ export default function CloudAccountsPage() {
                   </div>
                 </div>
 
-                {currentRole === "Admin" && (
-                  <div className="card-actions">
+                <div className="card-actions">
+                  {acc.provider === "AWS" && (
+                    <button
+                      className="btn-secondary"
+                      onClick={() => fetchAwsResources(acc.id)}
+                      title="Test AWS Resources API"
+                      style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '6px', color: '#fff', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    >
+                      <Server size={14} /> Test API
+                    </button>
+                  )}
+                  {currentRole === "Admin" && (
                     <button
                       className="btn-delete"
                       onClick={() => handleDelete(acc.id, acc.accountName)}
@@ -275,8 +306,8 @@ export default function CloudAccountsPage() {
                     >
                       <Trash2 size={16} /> Disconnect
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -510,6 +541,112 @@ export default function CloudAccountsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* AWS Resources Modal */}
+      {selectedAwsAccount && (
+        <div className="modal-backdrop" onClick={() => setSelectedAwsAccount(null)}>
+          <div className="modal-container modal-large" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%' }}>
+            <div className="modal-header">
+              <h2>AWS Resources Data</h2>
+              <button
+                className="close-btn"
+                onClick={() => setSelectedAwsAccount(null)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="modal-body" style={{ padding: '20px', maxHeight: '70vh', overflowY: 'auto' }}>
+              {loadingResources ? (
+                <div className="empty-state">
+                  <div className="spinner"></div>
+                  <p>Fetching resources from AWS APIs...</p>
+                </div>
+              ) : (
+                <div className="aws-resources-container">
+                  {/* EC2 Instances */}
+                  <div className="resource-section" style={{ marginBottom: '2rem' }}>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#60a5fa', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <Server size={20} /> EC2 Instances ({awsResources.instances.length})
+                    </h3>
+                    {awsResources.instances.length === 0 ? (
+                      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>No EC2 instances found in this region.</p>
+                    ) : (
+                      <div className="table-responsive" style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Name</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>ID</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Type</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>State</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Public IP</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {awsResources.instances.map(inst => (
+                              <tr key={inst.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <td style={{ padding: '10px', fontWeight: '500' }}>{inst.name}</td>
+                                <td style={{ padding: '10px', color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>{inst.id}</td>
+                                <td style={{ padding: '10px', color: 'rgba(255,255,255,0.7)' }}>{inst.type}</td>
+                                <td style={{ padding: '10px' }}>
+                                  <span style={{ 
+                                    padding: '2px 8px', 
+                                    borderRadius: '12px', 
+                                    fontSize: '0.75rem', 
+                                    backgroundColor: inst.state === 'running' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                    color: inst.state === 'running' ? '#4ade80' : '#f87171'
+                                  }}>
+                                    {inst.state}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '10px', color: 'rgba(255,255,255,0.7)' }}>{inst.publicIp}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* VPCs */}
+                  <div className="resource-section">
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a78bfa', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <Cloud size={20} /> Virtual Private Clouds (VPCs) ({awsResources.vpcs.length})
+                    </h3>
+                    {awsResources.vpcs.length === 0 ? (
+                      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>No VPCs found in this region.</p>
+                    ) : (
+                      <div className="table-responsive" style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                          <thead>
+                            <tr style={{ backgroundColor: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>Name</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>ID</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>CIDR Block</th>
+                              <th style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>State</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {awsResources.vpcs.map(vpc => (
+                              <tr key={vpc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <td style={{ padding: '10px', fontWeight: '500' }}>{vpc.name}</td>
+                                <td style={{ padding: '10px', color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>{vpc.id}</td>
+                                <td style={{ padding: '10px', color: 'rgba(255,255,255,0.7)' }}>{vpc.cidr}</td>
+                                <td style={{ padding: '10px', color: 'rgba(255,255,255,0.7)' }}>{vpc.state}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

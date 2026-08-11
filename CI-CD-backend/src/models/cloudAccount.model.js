@@ -75,7 +75,7 @@ const cloudAccountSchema = new mongoose.Schema(
 );
 
 // Middleware to encrypt credentials before saving
-cloudAccountSchema.pre("save", async function (next) {
+cloudAccountSchema.pre("save", async function () {
   if (this.isModified("secretAccessKey") && this.secretAccessKey) {
     this.secretAccessKey = encrypt(this.secretAccessKey);
   }
@@ -85,7 +85,6 @@ cloudAccountSchema.pre("save", async function (next) {
   if (this.isModified("azureClientSecret") && this.azureClientSecret) {
     this.azureClientSecret = encrypt(this.azureClientSecret);
   }
-  next();
 });
 
 // Virtual or method could be used, but let's decrypt when finding manually in controllers or using a post-find hook

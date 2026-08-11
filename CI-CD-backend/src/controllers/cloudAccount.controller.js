@@ -1,5 +1,6 @@
 import logger from "../config/logger.js";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
+import { EC2Client, DescribeInstancesCommand, DescribeVpcsCommand } from "@aws-sdk/client-ec2";
 import { ProjectsClient } from "@google-cloud/resource-manager";
 import { ClientSecretCredential } from "@azure/identity";
 import { ResourceManagementClient } from "@azure/arm-resources";
@@ -227,6 +228,76 @@ export const deleteCloudAccount = async (req, res) => {
     return res.status(200).json({ success: true, message: "Cloud account deleted successfully." });
   } catch (error) {
     logger.error("DELETE CLOUD ACCOUNT ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ======================================
+// Fetch AWS Resources for Testing
+// ======================================
+export const getAwsResources = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find account and ensure ownership
+    const account = await CloudAccount.findOne({ _id: id, owner: req.user._id });
+
+    if (!account) {
+      return res.status(404).json({ success: false, message: "Cloud account not found." });
+    }
+
+    if (account.provider !== "AWS") {
+      return res.status(400).json({ success: false, message: "Requested account is not an AWS account." });
+    }
+
+    // Initialize EC2 Client using decrypted credentials
+    const ec2Client = new EC2Client({
+      region: account.region,
+      credentials: {
+        accessKeyId: account.accessKeyId,
+        secretAccessKey: account.secretAccessKey,
+      },
+    });
+
+    // Fetch EC2 Instances
+    const instancesData = await ec2Client.send(new DescribeInstancesCommand({}));
+    const instances = [];
+    instancesData.Reservations?.forEach(reservation => {
+      reservation.Instances?.forEach(instance => {
+        // Extract Name from Tags
+        const nameTag = instance.Tags?.find(tag => tag.Key === "Name");
+        instances.push({
+          id: instance.InstanceId,
+          name: nameTag ? nameTag.Value : "Unnamed Instance",
+          state: instance.State?.Name,
+          type: instance.InstanceType,
+          publicIp: instance.PublicIpAddress || "None",
+        });
+      });
+    });
+
+    // Fetch VPCs
+    const vpcsData = await ec2Client.send(new DescribeVpcsCommand({}));
+    const vpcs = vpcsData.Vpcs?.map(vpc => {
+      const nameTag = vpc.Tags?.find(tag => tag.Key === "Name");
+      return {
+        id: vpc.VpcId,
+        name: nameTag ? nameTag.Value : "Unnamed VPC",
+        cidr: vpc.CidrBlock,
+        state: vpc.State,
+      };
+    }) || [];
+
+    return res.status(200).json({
+      success: true,
+      resources: {
+        instances,
+        vpcs
+      }
+    });
+
+  } catch (error) {
+    logger.error("GET AWS RESOURCES ERROR:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

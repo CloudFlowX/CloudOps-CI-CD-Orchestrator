@@ -47,6 +47,7 @@ export const register = async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        githubUsername: user.githubUsername,
       },
     });
   } catch (error) {
@@ -108,6 +109,7 @@ export const login = async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
+        githubUsername: user.githubUsername,
       },
     });
   } catch (error) {

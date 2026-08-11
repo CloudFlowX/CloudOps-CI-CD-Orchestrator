@@ -1,18 +1,15 @@
 import { exec } from "child_process";
 
-export const runCommand = (command, cwd) => {
+export const runCommand = (command, cwd, onLog) => {
   return new Promise((resolve, reject) => {
-
-    exec(
+    const child = exec(
       command,
       {
         cwd,
         maxBuffer: 1024 * 1024 * 10, // 10MB buffer
         timeout: 5 * 60 * 1000, // 5 minute timeout
       },
-
       (error, stdout, stderr) => {
-
         if (error) {
           console.error(`[CMD ERROR] Command: ${command}`);
           console.error(`[CMD ERROR] Exit Code: ${error.code}`);
@@ -27,8 +24,19 @@ export const runCommand = (command, cwd) => {
 
         resolve(stdout);
       }
-
     );
 
+    if (onLog && typeof onLog === 'function') {
+      if (child.stdout) {
+        child.stdout.on('data', (data) => {
+          onLog(data.toString());
+        });
+      }
+      if (child.stderr) {
+        child.stderr.on('data', (data) => {
+          onLog(data.toString());
+        });
+      }
+    }
   });
 };

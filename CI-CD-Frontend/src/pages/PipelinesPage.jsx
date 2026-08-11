@@ -44,6 +44,7 @@ export default function PipelinesPage() {
   const navigate = useNavigate();
   const [pipelines, setPipelines] = useState([]);
   const [availableRepos, setAvailableRepos] = useState([]);
+  const [availableCloudAccounts, setAvailableCloudAccounts] = useState([]);
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
@@ -59,31 +60,15 @@ export default function PipelinesPage() {
   const [toast, setToast] = useState(null);
 
   React.useEffect(() => {
-    let intervalId;
-    if (isViewModalOpen && selectedPipeline && selectedPipeline.status === 'Running') {
-      const fetchLogs = async () => {
-        try {
-          const res = await ApiClient.get(`/pipelines/${selectedPipeline.id}/container/logs?tail=50`);
-          if (res.success && res.logs) {
-            setLiveLogs(res.logs.split('\n'));
-          }
-        } catch (e) {
-          // ignore error if container isn't running yet
-        }
-      };
-      fetchLogs();
-      intervalId = setInterval(fetchLogs, 3000);
-    } else {
+    if (!isViewModalOpen) {
       setLiveLogs([]);
     }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isViewModalOpen, selectedPipeline]);
+  }, [isViewModalOpen]);
 
   React.useEffect(() => {
     fetchPipelines();
     fetchRepos();
+    fetchCloudAccounts();
   }, []);
 
   const handleAuthError = (err) => {
@@ -118,6 +103,13 @@ export default function PipelinesPage() {
         }
         return p;
       }));
+    });
+
+    socket.on("pipeline_log", ({ id, log }) => {
+      setLiveLogs(prev => {
+        // Prevent duplicate consecutive lines if possible, or just append
+        return [...prev, log];
+      });
     });
 
     return () => {
@@ -166,6 +158,18 @@ export default function PipelinesPage() {
     }
   };
 
+  const fetchCloudAccounts = async () => {
+    try {
+      const res = await ApiClient.get('/cloud-accounts');
+      if (res.success && res.accounts) {
+        setAvailableCloudAccounts(res.accounts.filter(a => a.provider === 'AWS'));
+      }
+    } catch (e) {
+      console.error('Fetch cloud accounts error:', e);
+      handleAuthError(e);
+    }
+  };
+
   // New pipeline form state
   const [newPipeline, setNewPipeline] = useState({
     name: '',
@@ -174,7 +178,10 @@ export default function PipelinesPage() {
     buildCommand: 'npm run build',
     dockerfilePath: './Dockerfile',
     environment: 'development',
-    deploymentTarget: 'docker'
+    deploymentTarget: 'docker',
+    cloudAccount: '',
+    ec2InstanceId: '',
+    appPort: 3000
   });
 
   const showToast = (message, type = 'info') => {
@@ -945,25 +952,10 @@ export default function PipelinesPage() {
                 <div className="terminal-content">
                   {liveLogs.length > 0 ? (
                     liveLogs.map((log, idx) => (
-                      <p key={idx} className="log-line info">{log}</p>
+                      <p key={idx} className={`log-line ${log.includes('[ERROR]') || log.includes('ERR!') ? 'error' : log.includes('✓') || log.includes('[SUCCESS]') ? 'success' : 'info'}`}>{log}</p>
                     ))
                   ) : (
-                    <>
-                      <p className="log-line info">[INFO] Initializing runner...</p>
-                      <p className="log-line info">[INFO] Fetching git ref refs/heads/{selectedPipeline.branch}...</p>
-                      <p className="log-line success">✓ Commit {selectedPipeline.commitHash} verified and checked out.</p>
-                      <p className="log-line info">[BUILD] Executing docker build...</p>
-                      {selectedPipeline.status === 'Failed' ? (
-                        <>
-                          <p className="log-line error">✖ FAIL: Pipeline execution failed.</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="log-line success">✓ Pipeline execution finished.</p>
-                          <p className="log-line info">Waiting for live logs from container...</p>
-                        </>
-                      )}
-                    </>
+                    <p className="log-line info">Waiting for logs...</p>
                   )}
                 </div>
               </div>
@@ -1040,8 +1032,8 @@ export default function PipelinesPage() {
                     required
                   >
                     <option value="">Select a repository</option>
-                    {availableRepos.map(repo => (
-                      <option key={repo._id} value={repo._id}>{repo.name}</option>
+                    {availableRepos.map((repo, idx) => (
+                      <option key={repo._id || repo.id || idx} value={repo._id || repo.id}>{repo.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1072,17 +1064,114 @@ export default function PipelinesPage() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Dockerfile Path</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newPipeline.dockerfilePath}
-                    onChange={(e) =>
-                      setNewPipeline({ ...newPipeline, dockerfilePath: e.target.value })
-                    }
-                  />
+                <div className="form-group deployment-type-group">
+                  <label className="form-label">Deployment Target</label>
+                  <div className="radio-group-modern">
+                    <label className={`radio-card ${newPipeline.deploymentTarget === 'aws' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="deploymentTarget"
+                        value="aws"
+                        checked={newPipeline.deploymentTarget === 'aws'}
+                        onChange={(e) => {
+                          setNewPipeline({ 
+                            ...newPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: '' 
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">Direct EC2</span>
+                        <span className="radio-desc">Dockerfile: Not Required</span>
+                      </div>
+                    </label>
+
+                    <label className={`radio-card ${newPipeline.deploymentTarget === 'docker' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="deploymentTarget"
+                        value="docker"
+                        checked={newPipeline.deploymentTarget === 'docker'}
+                        onChange={(e) => {
+                          setNewPipeline({ 
+                            ...newPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: './Dockerfile'
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">Docker + ECR + EC2</span>
+                        <span className="radio-desc">Dockerfile: Required</span>
+                      </div>
+                    </label>
+                  </div>
                 </div>
+
+                {newPipeline.deploymentTarget === 'docker' && (
+                  <div className="form-group">
+                    <label className="form-label">Dockerfile Path</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={newPipeline.dockerfilePath}
+                      onChange={(e) =>
+                        setNewPipeline({ ...newPipeline, dockerfilePath: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                )}
+
+                {newPipeline.deploymentTarget === 'aws' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">AWS Account</label>
+                      <select
+                        className="form-select"
+                        value={newPipeline.cloudAccount}
+                        onChange={(e) =>
+                          setNewPipeline({ ...newPipeline, cloudAccount: e.target.value })
+                        }
+                        required
+                      >
+                        <option value="">Select AWS Account</option>
+                        {availableCloudAccounts.map((acc, idx) => (
+                          <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group flex-2">
+                        <label className="form-label">EC2 Instance ID</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. i-0abcd1234efgh5678"
+                          value={newPipeline.ec2InstanceId}
+                          onChange={(e) =>
+                            setNewPipeline({ ...newPipeline, ec2InstanceId: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="form-group flex-1">
+                        <label className="form-label">App Port</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder="e.g. 3000"
+                          value={newPipeline.appPort}
+                          onChange={(e) =>
+                            setNewPipeline({ ...newPipeline, appPort: parseInt(e.target.value) || 3000 })
+                          }
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="modal-footer">
@@ -1166,17 +1255,114 @@ export default function PipelinesPage() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">Dockerfile Path</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={editPipeline.dockerfilePath}
-                    onChange={(e) =>
-                      setEditPipeline({ ...editPipeline, dockerfilePath: e.target.value })
-                    }
-                  />
+                <div className="form-group deployment-type-group">
+                  <label className="form-label">Deployment Target</label>
+                  <div className="radio-group-modern">
+                    <label className={`radio-card ${editPipeline.deploymentTarget === 'aws' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="editDeploymentTarget"
+                        value="aws"
+                        checked={editPipeline.deploymentTarget === 'aws'}
+                        onChange={(e) => {
+                          setEditPipeline({ 
+                            ...editPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: '' 
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">Direct EC2</span>
+                        <span className="radio-desc">Dockerfile: Not Required</span>
+                      </div>
+                    </label>
+
+                    <label className={`radio-card ${editPipeline.deploymentTarget === 'docker' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="editDeploymentTarget"
+                        value="docker"
+                        checked={editPipeline.deploymentTarget === 'docker'}
+                        onChange={(e) => {
+                          setEditPipeline({ 
+                            ...editPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: './Dockerfile'
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">Docker + ECR + EC2</span>
+                        <span className="radio-desc">Dockerfile: Required</span>
+                      </div>
+                    </label>
+                  </div>
                 </div>
+
+                {editPipeline.deploymentTarget === 'docker' && (
+                  <div className="form-group">
+                    <label className="form-label">Dockerfile Path</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={editPipeline.dockerfilePath || ''}
+                      onChange={(e) =>
+                        setEditPipeline({ ...editPipeline, dockerfilePath: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                )}
+
+                {editPipeline.deploymentTarget === 'aws' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">AWS Account</label>
+                      <select
+                        className="form-select"
+                        value={editPipeline.cloudAccount || ''}
+                        onChange={(e) =>
+                          setEditPipeline({ ...editPipeline, cloudAccount: e.target.value })
+                        }
+                        required
+                      >
+                        <option value="">Select AWS Account</option>
+                        {availableCloudAccounts.map((acc, idx) => (
+                          <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group flex-2">
+                        <label className="form-label">EC2 Instance ID</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. i-0abcd1234efgh5678"
+                          value={editPipeline.ec2InstanceId || ''}
+                          onChange={(e) =>
+                            setEditPipeline({ ...editPipeline, ec2InstanceId: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+                      <div className="form-group flex-1">
+                        <label className="form-label">App Port</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder="e.g. 3000"
+                          value={editPipeline.appPort || ''}
+                          onChange={(e) =>
+                            setEditPipeline({ ...editPipeline, appPort: parseInt(e.target.value) || 3000 })
+                          }
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="modal-footer">

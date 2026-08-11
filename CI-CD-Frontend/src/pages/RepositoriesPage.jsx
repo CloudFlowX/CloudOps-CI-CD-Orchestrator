@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 import {
   Search,
   Plus,
@@ -54,6 +55,8 @@ import ApiClient from '../utils/api';
 
 export default function RepositoriesPage() {
   const { currentRole } = useRole();
+  const { user, token } = useAuth();
+  
   const [repositories, setRepositories] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [providerFilter, setProviderFilter] = useState('All');
@@ -64,9 +67,107 @@ export default function RepositoriesPage() {
   const [toastMessage, setToastMessage] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // GitHub Integration States
+  const [isGithubConnected, setIsGithubConnected] = useState(false);
+  const [githubRepos, setGithubRepos] = useState([]);
+  const [githubBranches, setGithubBranches] = useState([]);
+  const [loadingGithubRepos, setLoadingGithubRepos] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+
   React.useEffect(() => {
     fetchRepositories();
   }, []);
+
+  // GitHub OAuth Callback Handling
+  React.useEffect(() => {
+    if (user?.githubUsername) {
+      setIsGithubConnected(true);
+    }
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    
+    if (code && !user?.githubUsername) {
+      handleGithubCallback(code);
+    }
+  }, [user]);
+
+  const handleConnectGithub = async () => {
+    try {
+      const res = await ApiClient.get('/github/auth-url');
+      if (res.success && res.url) {
+        window.location.href = res.url;
+      } else {
+        showToast(res.message || "Failed to initiate GitHub login");
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || err.message || "Failed to initiate GitHub login");
+    }
+  };
+
+  const handleGithubCallback = async (code) => {
+    try {
+      setLoading(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      const res = await ApiClient.post('/github/connect', { code });
+      if (res.success) {
+        showToast("Successfully connected to GitHub!");
+        setIsGithubConnected(true);
+      }
+    } catch (err) {
+      showToast("Failed to connect GitHub account");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch GitHub repos when modal opens
+  React.useEffect(() => {
+    if (isConnectModalOpen && isGithubConnected && githubRepos.length === 0) {
+      fetchGithubRepos();
+    }
+  }, [isConnectModalOpen, isGithubConnected]);
+
+  const fetchGithubRepos = async () => {
+    try {
+      setLoadingGithubRepos(true);
+      const res = await ApiClient.get('/github/repositories');
+      if (res.success) {
+        setGithubRepos(res.repositories);
+      }
+    } catch (err) {
+      showToast("Failed to fetch GitHub repositories");
+    } finally {
+      setLoadingGithubRepos(false);
+    }
+  };
+
+  const handleRepoChange = async (repoFullName) => {
+    const selectedRepo = githubRepos.find(r => r.fullName === repoFullName);
+    if (!selectedRepo) return;
+    
+    setNewRepo({ 
+      ...newRepo, 
+      name: selectedRepo.name,
+      fullName: selectedRepo.fullName,
+      provider: 'GitHub',
+      language: selectedRepo.language || 'TypeScript',
+      branch: selectedRepo.defaultBranch || 'main'
+    });
+
+    try {
+      setLoadingBranches(true);
+      const [owner, repo] = repoFullName.split('/');
+      const res = await ApiClient.get(`/github/repositories/${owner}/${repo}/branches`);
+      if (res.success) {
+        setGithubBranches(res.branches);
+      }
+    } catch (err) {
+      showToast("Failed to fetch branches");
+    } finally {
+      setLoadingBranches(false);
+    }
+  };
 
   const fetchRepositories = async () => {
     try {
@@ -104,6 +205,7 @@ export default function RepositoriesPage() {
   // New Repository Form State
   const [newRepo, setNewRepo] = useState({
     name: '',
+    fullName: '',
     provider: 'GitHub',
     branch: 'main',
     language: 'TypeScript'
@@ -200,7 +302,7 @@ export default function RepositoriesPage() {
     try {
       const payload = {
         name: newRepo.name,
-        githubUrl: `https://${newRepo.provider.toLowerCase()}.com/kunal24/${newRepo.name.toLowerCase().replace(/\s+/g, '-')}`,
+        githubUrl: newRepo.fullName ? `https://github.com/${newRepo.fullName}` : `https://${newRepo.provider.toLowerCase()}.com/kunal24/${newRepo.name.toLowerCase().replace(/\s+/g, '-')}`,
         branch: newRepo.branch || 'main',
         visibility: 'private'
       };
@@ -290,13 +392,15 @@ export default function RepositoriesPage() {
           <p className="repo-subtitle">Manage your connected repositories and source code</p>
         </div>
         {currentRole !== 'Viewer' && (
-          <button 
-            className="btn btn-primary"
-            onClick={() => setIsConnectModalOpen(true)}
-          >
-            <Plus size={18} />
-            <span>Connect Repository</span>
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setIsConnectModalOpen(true)}
+            >
+              <Plus size={18} />
+              <span>Connect Repository</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -599,47 +703,87 @@ export default function RepositoriesPage() {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>Repository Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. User Auth Microservice"
-                  value={newRepo.name}
-                  onChange={(e) => setNewRepo({ ...newRepo, name: e.target.value })}
-                  required
-                  className="modal-input"
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Default Branch</label>
-                  <input
-                    type="text"
-                    placeholder="main"
-                    value={newRepo.branch}
-                    onChange={(e) => setNewRepo({ ...newRepo, branch: e.target.value })}
-                    className="modal-input"
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Primary Language</label>
-                  <select
-                    value={newRepo.language}
-                    onChange={(e) => setNewRepo({ ...newRepo, language: e.target.value })}
-                    className="modal-input"
+              {newRepo.provider === 'GitHub' && !isGithubConnected ? (
+                <div className="github-connect-prompt" style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <p style={{ marginBottom: '15px', color: 'var(--text-secondary)' }}>
+                    Connect your GitHub account to automatically select repositories and branches.
+                  </p>
+                  <button 
+                    type="button"
+                    className="btn"
+                    style={{ backgroundColor: '#24292e', color: 'white', margin: '0 auto' }}
+                    onClick={handleConnectGithub}
                   >
-                    <option value="TypeScript">TypeScript</option>
-                    <option value="JavaScript">JavaScript</option>
-                    <option value="Python">Python</option>
-                    <option value="Go">Go</option>
-                    <option value="Java">Java</option>
-                    <option value="Rust">Rust</option>
-                    <option value="Kotlin">Kotlin</option>
-                  </select>
+                    <GitHubIcon className="w-4 h-4" />
+                    <span style={{ marginLeft: '8px' }}>Connect with GitHub</span>
+                  </button>
                 </div>
-              </div>
+              ) : newRepo.provider === 'GitHub' && isGithubConnected ? (
+                <>
+                  <div className="form-group">
+                    <label>Select Repository</label>
+                    <div className="select-wrapper-full">
+                      <select
+                        value={newRepo.fullName}
+                        onChange={(e) => handleRepoChange(e.target.value)}
+                        required
+                        className="modal-input"
+                        disabled={loadingGithubRepos}
+                      >
+                        <option value="">{loadingGithubRepos ? 'Loading repositories...' : 'Select a repository'}</option>
+                        {githubRepos.map(r => (
+                          <option key={r.id} value={r.fullName}>{r.fullName}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Select Branch</label>
+                      <select
+                        value={newRepo.branch}
+                        onChange={(e) => setNewRepo({ ...newRepo, branch: e.target.value })}
+                        required
+                        className="modal-input"
+                        disabled={loadingBranches || !newRepo.fullName}
+                      >
+                        <option value="">{loadingBranches ? 'Loading branches...' : 'Select a branch'}</option>
+                        {githubBranches.map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label>Repository Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. User Auth Microservice"
+                      value={newRepo.name}
+                      onChange={(e) => setNewRepo({ ...newRepo, name: e.target.value })}
+                      required
+                      className="modal-input"
+                    />
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Default Branch</label>
+                      <input
+                        type="text"
+                        placeholder="main"
+                        value={newRepo.branch}
+                        onChange={(e) => setNewRepo({ ...newRepo, branch: e.target.value })}
+                        className="modal-input"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
 
               <div className="modal-actions">
                 <button

@@ -12,7 +12,8 @@ const git = simpleGit();
 export const cloneRepository = async (
   githubUrl,
   repoName,
-  branch = "main"
+  branch = "main",
+  onLog
 ) => {
   try {
     // Workspace outside current project
@@ -26,24 +27,30 @@ export const cloneRepository = async (
     // Repository path
     const projectPath = path.join(workspace, repoName);
 
-    // Delete old repository if exists
+    // Check if repository already exists
     if (fs.existsSync(projectPath)) {
-      fs.rmSync(projectPath, {
-        recursive: true,
-        force: true,
-      });
+      if (onLog) onLog(`[INFO] Repository exists. Pulling latest changes (branch: ${branch})...\n`);
+      console.log(`🔄 Pulling latest changes for ${projectPath} (branch: ${branch})`);
+      
+      const repoGit = simpleGit(projectPath);
+      await repoGit.checkout(branch);
+      await repoGit.pull('origin', branch);
+      
+      if (onLog) onLog(`[INFO] Git pull completed. (Using cached node_modules for speed! ⚡)\n`);
+    } else {
+      if (onLog) onLog(`[INFO] Cloning repository ${githubUrl} into ${projectPath} (branch: ${branch})...\n`);
+      console.log(
+        `📥 Cloning repository into ${projectPath} (branch: ${branch})`
+      );
+
+      // Clone with specific branch
+      await git.clone(githubUrl, projectPath, [
+        "--branch",
+        branch,
+        "--single-branch",
+      ]);
+      if (onLog) onLog(`[INFO] Clone completed.\n`);
     }
-
-    console.log(
-      `📥 Cloning repository into ${projectPath} (branch: ${branch})`
-    );
-
-    // Clone with specific branch
-    await git.clone(githubUrl, projectPath, [
-      "--branch",
-      branch,
-      "--single-branch",
-    ]);
 
     // ============================
     // Post-Clone Verification
@@ -80,7 +87,8 @@ export const cloneRepository = async (
 // ==============================
 export const buildProject = async (
   projectPath,
-  buildCommand
+  buildCommand,
+  onLog
 ) => {
   try {
     // Check package.json
@@ -111,12 +119,15 @@ export const buildProject = async (
     // ============================
     // Install Dependencies
     // ============================
+    if (onLog) onLog(`[BUILD] Installing dependencies (npm install)...\n`);
     console.log("📦 Installing dependencies...");
 
     const installLogs = await runCommand(
       "npm install",
-      projectPath
+      projectPath,
+      onLog
     );
+    if (onLog) onLog(`[BUILD] Dependencies installed ✓\n`);
 
     // ============================
     // Determine Build Command
@@ -160,12 +171,15 @@ export const buildProject = async (
       };
     }
 
+    if (onLog) onLog(`[BUILD] Running build command: ${effectiveCommand}...\n`);
     console.log(`🏗️ Running: ${effectiveCommand}`);
 
     const buildLogs = await runCommand(
       effectiveCommand,
-      projectPath
+      projectPath,
+      onLog
     );
+    if (onLog) onLog(`[BUILD] Build completed ✓\n`);
 
     return { installLogs, buildLogs };
   } catch (error) {
@@ -180,7 +194,8 @@ export const buildProject = async (
 export const buildDockerImage = async (
   projectPath,
   imageName,
-  dockerfilePath = "./Dockerfile"
+  dockerfilePath = "./Dockerfile",
+  onLog
 ) => {
   try {
     // ============================
@@ -204,10 +219,13 @@ export const buildDockerImage = async (
     // ============================
     // Build Docker Image
     // ============================
+    if (onLog) onLog(`[DOCKER] Building Docker image: ${imageName}...\n`);
     const dockerLogs = await runCommand(
       `docker build -t ${imageName} -f ${dockerfilePath} .`,
-      projectPath
+      projectPath,
+      onLog
     );
+    if (onLog) onLog(`[DOCKER] Docker image built successfully ✓\n`);
 
     console.log(`✅ Docker image built successfully: ${imageName}`);
 

@@ -27,9 +27,13 @@ import './DeploymentsPage.css';
 export default function DeploymentsPage() {
   const { currentRole } = useRole();
   const [deployments, setDeployments] = useState([]);
+  const [availableRepos, setAvailableRepos] = useState([]);
+  const [availableCloudAccounts, setAvailableCloudAccounts] = useState([]);
 
   React.useEffect(() => {
     fetchDeployments();
+    fetchRepos();
+    fetchCloudAccounts();
   }, []);
 
   const fetchDeployments = async () => {
@@ -48,8 +52,12 @@ export default function DeploymentsPage() {
           lastDeployed: new Date(p.updatedAt).toLocaleDateString(),
           deployedBy: p.createdBy?.fullName || 'system',
           avatar: null,
-          url: `https://${p.name.toLowerCase().replace(/\s+/g, '-')}.internal`,
-          displayUrl: `${p.name.toLowerCase().replace(/\s+/g, '-')}.internal`,
+          url: p.deployedUrl || (p.deploymentTarget === 'docker' || !p.deploymentTarget 
+            ? `http://localhost:${p.containerPort || p.appPort || 3000}` 
+            : `http://localhost:${p.appPort || 5003}`),
+          displayUrl: p.deployedUrl ? p.deployedUrl.replace('http://', '').replace('https://', '') : (p.deploymentTarget === 'docker' || !p.deploymentTarget 
+            ? `localhost:${p.containerPort || p.appPort || 3000}`
+            : `localhost:${p.appPort || 5003}`),
           health: p.status === 'success' ? '100%' : '0%',
           cpuUsage: '10%',
           memoryUsage: '256MB',
@@ -62,6 +70,28 @@ export default function DeploymentsPage() {
       triggerToast('Failed to load deployments');
     }
   };
+
+  const fetchRepos = async () => {
+    try {
+      const res = await ApiClient.get('/repositories');
+      if (res.success && res.repositories) {
+        setAvailableRepos(res.repositories);
+      }
+    } catch (e) {
+      console.error('Fetch repos error:', e);
+    }
+  };
+
+  const fetchCloudAccounts = async () => {
+    try {
+      const res = await ApiClient.get('/cloud-accounts');
+      if (res.success && res.accounts) {
+        setAvailableCloudAccounts(res.accounts.filter(a => a.provider === 'AWS'));
+      }
+    } catch (e) {
+      console.error('Fetch cloud accounts error:', e);
+    }
+  };
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -72,9 +102,16 @@ export default function DeploymentsPage() {
   const [showNewDeploymentModal, setShowNewDeploymentModal] = useState(false);
   const [newDeployData, setNewDeployData] = useState({
     appName: '',
+    repository: '',
+    branch: 'main',
     version: 'v1.0.0',
-    environment: 'Production',
-    replicasTotal: 2
+    cloudProvider: 'AWS',
+    awsAccount: '',
+    deploymentTarget: 'EC2',
+    ec2Instance: '',
+    deploymentStrategy: 'Recreate',
+    appPort: 5003,
+    environment: 'Development'
   });
 
   const [scaleModalItem, setScaleModalItem] = useState(null);
@@ -84,6 +121,31 @@ export default function DeploymentsPage() {
   const [rollbackVersion, setRollbackVersion] = useState('');
 
   const [viewDetailsItem, setViewDetailsItem] = useState(null);
+
+  const [availableInstances, setAvailableInstances] = useState([]);
+  const [fetchingInstances, setFetchingInstances] = useState(false);
+
+  React.useEffect(() => {
+    if (newDeployData.cloudProvider === 'AWS' && newDeployData.awsAccount) {
+      const fetchInstances = async () => {
+        try {
+          setFetchingInstances(true);
+          setAvailableInstances([]); // clear previous
+          const res = await ApiClient.get(`/cloud-accounts/${newDeployData.awsAccount}/resources/aws`);
+          if (res.success && res.resources && res.resources.instances) {
+            setAvailableInstances(res.resources.instances);
+          }
+        } catch (error) {
+          console.error("Failed to fetch EC2 instances", error);
+        } finally {
+          setFetchingInstances(false);
+        }
+      };
+      fetchInstances();
+    } else {
+      setAvailableInstances([]);
+    }
+  }, [newDeployData.cloudProvider, newDeployData.awsAccount]);
 
   // Show Toast Notification
   const triggerToast = (msg) => {
@@ -213,8 +275,12 @@ export default function DeploymentsPage() {
       lastDeployed: 'Just now',
       deployedBy: 'kunal24',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-      url: `https://${newDeployData.appName.toLowerCase().replace(/\s+/g, '-')}.${newDeployData.environment.toLowerCase() === 'production' ? 'ecommerce.com' : 'internal'}`,
-      displayUrl: `${newDeployData.appName.toLowerCase().replace(/\s+/g, '-')}.${newDeployData.environment.toLowerCase() === 'production' ? 'ecommerce.com' : 'internal'}`,
+      url: newDeployData.deploymentTarget === 'docker' || !newDeployData.deploymentTarget 
+        ? `http://localhost:${newDeployData.appPort || 3000}` 
+        : `http://localhost:${newDeployData.appPort || 5003}`,
+      displayUrl: newDeployData.deploymentTarget === 'docker' || !newDeployData.deploymentTarget 
+        ? `localhost:${newDeployData.appPort || 3000}`
+        : `localhost:${newDeployData.appPort || 5003}`,
       health: '50%',
       cpuUsage: '30%',
       memoryUsage: '350MB'
@@ -547,7 +613,7 @@ export default function DeploymentsPage() {
       {/* New Deployment Modal */}
       {showNewDeploymentModal && (
         <div className="modal-backdrop" onClick={() => setShowNewDeploymentModal(false)}>
-          <div className="modal-content glass-card animate-fade-in" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content modal-large glass-card animate-fade-in" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title-wrap">
                 <Rocket size={22} className="modal-icon-blue" />
@@ -560,11 +626,11 @@ export default function DeploymentsPage() {
             
             <form onSubmit={handleCreateDeployment} className="modal-form">
               <div className="form-group">
-                <label>Application Name</label>
+                <label>1. Application Name</label>
                 <input 
                   type="text" 
                   required
-                  placeholder="e.g. Auth Service"
+                  placeholder="e.g. College Management System"
                   value={newDeployData.appName}
                   onChange={(e) => setNewDeployData({...newDeployData, appName: e.target.value})}
                   className="form-input"
@@ -573,41 +639,144 @@ export default function DeploymentsPage() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Version Tag</label>
+                  <label>2. Source / Repository</label>
+                  <select
+                    className="form-input"
+                    value={newDeployData.repository}
+                    onChange={(e) => setNewDeployData({...newDeployData, repository: e.target.value})}
+                    required
+                  >
+                    <option value="">Select a repository</option>
+                    {availableRepos.map((repo, idx) => (
+                      <option key={repo._id || repo.id || idx} value={repo._id || repo.id}>{repo.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>3. Branch</label>
                   <input 
                     type="text" 
                     required
-                    placeholder="e.g. v2.5.0"
+                    placeholder="e.g. main"
+                    value={newDeployData.branch}
+                    onChange={(e) => setNewDeployData({...newDeployData, branch: e.target.value})}
+                    className="form-input"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>4. Version / Build</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. Build # / v1.0.0"
                     value={newDeployData.version}
                     onChange={(e) => setNewDeployData({...newDeployData, version: e.target.value})}
                     className="form-input"
                   />
                 </div>
-
                 <div className="form-group">
-                  <label>Target Environment</label>
+                  <label>5. Cloud Provider</label>
+                  <select 
+                    value={newDeployData.cloudProvider}
+                    onChange={(e) => setNewDeployData({...newDeployData, cloudProvider: e.target.value})}
+                    className="form-input"
+                  >
+                    <option value="AWS">AWS</option>
+                    <option value="GCP">GCP</option>
+                    <option value="Azure">Azure</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>6. AWS Account</label>
+                  <select
+                    className="form-input"
+                    value={newDeployData.awsAccount}
+                    onChange={(e) => setNewDeployData({...newDeployData, awsAccount: e.target.value})}
+                    required={newDeployData.cloudProvider === 'AWS'}
+                  >
+                    <option value="">Select Cloud Account</option>
+                    {availableCloudAccounts.map((acc, idx) => (
+                      <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>7. Deployment Target</label>
+                  <select 
+                    value={newDeployData.deploymentTarget}
+                    onChange={(e) => setNewDeployData({...newDeployData, deploymentTarget: e.target.value})}
+                    className="form-input"
+                  >
+                    <option value="EC2">EC2</option>
+                    <option value="ECS">ECS</option>
+                    <option value="EKS">EKS</option>
+                    <option value="S3">S3</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>8. EC2 Instance</label>
+                  <select 
+                    required={newDeployData.deploymentTarget === 'EC2'}
+                    value={newDeployData.ec2Instance}
+                    onChange={(e) => setNewDeployData({...newDeployData, ec2Instance: e.target.value})}
+                    className="form-input"
+                    disabled={fetchingInstances || !newDeployData.awsAccount || newDeployData.cloudProvider !== 'AWS'}
+                  >
+                    <option value="">{fetchingInstances ? 'Loading instances...' : 'Select EC2 Instance'}</option>
+                    {availableInstances.map(inst => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.name} ({inst.id}) - {inst.state}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>9. Deployment Strategy</label>
+                  <select 
+                    value={newDeployData.deploymentStrategy}
+                    onChange={(e) => setNewDeployData({...newDeployData, deploymentStrategy: e.target.value})}
+                    className="form-input"
+                  >
+                    <option value="Recreate">Recreate (Simple)</option>
+                    <option value="Rolling">Rolling Update</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>10. Application Port</label>
+                  <input 
+                    type="number"
+                    required
+                    placeholder="e.g. 5003"
+                    value={newDeployData.appPort}
+                    onChange={(e) => setNewDeployData({...newDeployData, appPort: e.target.value})}
+                    className="form-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>11. Environment</label>
                   <select 
                     value={newDeployData.environment}
                     onChange={(e) => setNewDeployData({...newDeployData, environment: e.target.value})}
                     className="form-input"
                   >
-                    <option value="Production">Production</option>
-                    <option value="Staging">Staging</option>
                     <option value="Development">Development</option>
+                    <option value="Staging">Staging</option>
+                    <option value="Production">Production</option>
                   </select>
                 </div>
-              </div>
-
-              <div className="form-group">
-                <label>Initial Replicas</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  max="10"
-                  value={newDeployData.replicasTotal}
-                  onChange={(e) => setNewDeployData({...newDeployData, replicasTotal: e.target.value})}
-                  className="form-input"
-                />
               </div>
 
               <div className="modal-actions">

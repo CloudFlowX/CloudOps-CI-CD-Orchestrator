@@ -749,17 +749,15 @@
 /* Modals */
 .modal-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px);
+  inset: 0;
   z-index: 1000;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: flex-start;
   padding: 20px;
+  overflow-y: auto;
 }
 
 .modal-container {
@@ -769,6 +767,7 @@
   width: 100%;
   max-width: 650px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  margin: 40px auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1031,6 +1030,88 @@
 .form-input:focus, .form-select:focus {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Modern Radio Group */
+.radio-group-modern {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.radio-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.radio-card:hover {
+  background: rgba(30, 41, 59, 0.5);
+  border-color: var(--border-light, #334155);
+}
+
+.radio-card.active {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue) inset;
+}
+
+.radio-card input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text-muted);
+  border-radius: 50%;
+  margin: 0;
+  margin-top: 2px;
+  outline: none;
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+}
+
+.radio-card input[type="radio"]::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  background-color: var(--accent-blue);
+}
+
+.radio-card input[type="radio"]:checked {
+  border-color: var(--accent-blue);
+}
+
+.radio-card input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+
+.radio-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.radio-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.radio-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
 }
 
 .modal-footer {
