@@ -1,34 +1,49 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-
-import { Mail, Shield, Lock, Send, ArrowLeft, Quote, ShieldCheck } from 'lucide-react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Lock, Eye, EyeOff, ShieldCheck, Zap, Mail, Quote, ArrowRight } from 'lucide-react';
+import ApiClient from '../utils/api';
 import './LoginPage.css';
 
 // Import local assets
 import mountailsImg from '../assets/mountails.png';
 import archiImg from '../assets/archi.png';
 
-import ApiClient from '../utils/api';
-
-function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
-  const [isSubmitted, setIsSubmitted] = useState(false);
+function ResetPasswordPage() {
+  const { token } = useParams();
+  const navigate = useNavigate();
+  
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email) return;
-    
-    setIsLoading(true);
     setLocalError('');
+
+    if (password !== confirmPassword) {
+      setLocalError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setLocalError('Password must be at least 6 characters');
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      const res = await ApiClient.post('/auth/forgot-password', { email });
+      const res = await ApiClient.post(`/auth/reset-password/${token}`, { password });
       if (res.success) {
-        setIsSubmitted(true);
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/login');
+        }, 3000);
       }
     } catch (err) {
-      setLocalError(err.message || 'Failed to send reset link. Please try again.');
+      setLocalError(err.message || 'Failed to reset password. Token may be invalid or expired.');
     } finally {
       setIsLoading(false);
     }
@@ -61,8 +76,8 @@ function ForgotPasswordPage() {
             <span className="dot"></span> DevOps Made Simple
           </div>
           
-          <h1>Secure your<br/><span className="highlight-text">account.</span></h1>
-          <p className="hero-desc">Reset your password and get back to your workflow quickly and securely.</p>
+          <h1>Reset your<br/><span className="highlight-text">password.</span></h1>
+          <p className="hero-desc">Choose a new password for your account. Make sure it's secure.</p>
 
           <div className="features-list">
             <div className="feature-item">
@@ -72,26 +87,6 @@ function ForgotPasswordPage() {
               <div className="feature-text">
                 <h3>Secure Recovery</h3>
                 <p>Your data stays protected</p>
-              </div>
-            </div>
-            
-            <div className="feature-item">
-              <div className="feature-icon bg-blue">
-                <Mail size={20} className="icon-blue" />
-              </div>
-              <div className="feature-text">
-                <h3>Fast Verification</h3>
-                <p>Get back in minutes</p>
-              </div>
-            </div>
-
-            <div className="feature-item">
-              <div className="feature-icon bg-purple">
-                <Lock size={20} className="icon-purple" />
-              </div>
-              <div className="feature-text">
-                <h3>Protected Account</h3>
-                <p>Same security, always</p>
               </div>
             </div>
           </div>
@@ -115,14 +110,14 @@ function ForgotPasswordPage() {
           <div className="auth-card-glass">
             
             <div className="auth-card-logo">
-              <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', marginBottom: '10px' }}>
-                <Lock size={20} color="#3B82F6" />
+              <div style={{ width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)', marginBottom: '10px' }}>
+                <Lock size={20} color="#A855F7" />
               </div>
             </div>
 
-            <h2>Forgot Password?</h2>
+            <h2>New Password</h2>
             <p className="subtitle" style={{ maxWidth: '300px', margin: '0 auto 24px' }}>
-              No worries! Enter your email address and we'll send you a secure password reset link.
+              Create a new password that is at least 6 characters long.
             </p>
 
             {localError && (
@@ -131,56 +126,66 @@ function ForgotPasswordPage() {
               </div>
             )}
 
-            {isSubmitted ? (
+            {success ? (
               <div style={{ textAlign: 'center', padding: '20px 0' }}>
                 <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px' }}>✓</div>
-                <h3 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Check your email</h3>
+                <h3 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Password Updated</h3>
                 <p style={{ color: '#94A3B8', fontSize: '13px', lineHeight: '1.5', marginBottom: '20px' }}>
-                  We've sent a password reset link to <strong>{email}</strong>.
+                  Your password has been successfully reset. Redirecting to login...
                 </p>
-
-                <button type="button" className="submit-btn" onClick={() => setIsSubmitted(false)}>
-                  Send again
-                </button>
+                <Link to="/login" className="submit-btn" style={{ textDecoration: 'none' }}>
+                  Go to Login
+                </Link>
               </div>
             ) : (
               <form className="auth-form" onSubmit={handleSubmit}>
-                <div className="form-group" style={{ marginBottom: '24px' }}>
-                  <label>Email Address</label>
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label>New Password</label>
                   <div className="input-wrapper">
-                    <Mail className="input-icon" size={16} />
+                    <Lock className="input-icon" size={16} />
                     <input
-                      type="email"
-                      placeholder="Enter your email address"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min 6 characters"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={6}
+                    />
+                    <button 
+                      type="button" 
+                      className="toggle-password"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label>Confirm Password</label>
+                  <div className="input-wrapper">
+                    <Lock className="input-icon" size={16} />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Confirm new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                       required
                     />
                   </div>
                 </div>
 
-                <button type="submit" className="submit-btn" disabled={isLoading || !email} style={{ marginBottom: '20px' }}>
-                  {isLoading ? 'Sending...' : (
-                    <>
-                      <Send size={16} style={{ marginRight: '8px' }} />
-                      Send Reset Link
-                    </>
-                  )}
+                <button type="submit" className="submit-btn" disabled={isLoading || !password || !confirmPassword} style={{ marginBottom: '20px' }}>
+                  {isLoading ? 'Resetting...' : 'Reset Password'} <ArrowRight size={18} />
                 </button>
-
-                <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                  <Link to="/login" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <ArrowLeft size={14} /> Back to Login
-                  </Link>
-                </div>
               </form>
             )}
 
             <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
               <ShieldCheck size={18} color="#64748B" style={{ flexShrink: 0, marginTop: '2px' }} />
               <p style={{ color: '#64748B', fontSize: '12px', margin: 0, lineHeight: '1.5' }}>
-                We never share your information.<br/>
-                Your account is always protected.
+                Your password is securely encrypted.<br/>
+                We never store it in plain text.
               </p>
             </div>
 
@@ -191,4 +196,4 @@ function ForgotPasswordPage() {
   );
 }
 
-export default ForgotPasswordPage;
+export default ResetPasswordPage;

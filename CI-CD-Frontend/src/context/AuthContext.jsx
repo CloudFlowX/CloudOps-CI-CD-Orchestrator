@@ -64,6 +64,12 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const setTokenWithLogin = (newToken) => {
+    localStorage.setItem('token', newToken);
+    setToken(newToken);
+    // User will be loaded automatically by the useEffect
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     setToken(null);
@@ -71,7 +77,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, error, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, token, loading, error, login, register, logout, setTokenWithLogin, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

@@ -3,7 +3,11 @@ import {
   register,
   login,
   getProfile,
+  forgotPassword,
+  resetPassword
 } from "../controllers/auth.controller.js";
+
+import { googleLogin, googleCallback, githubLogin, githubCallback } from "../controllers/oauth.controller.js";
 
 import { protect } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
@@ -19,6 +23,15 @@ router.post("/register", register);
 
 // Login User
 router.post("/login", login);
+
+// ==========================
+// OAuth Routes
+// ==========================
+router.get("/google", googleLogin);
+router.get("/google/callback", googleCallback);
+
+router.get("/github", githubLogin);
+router.get("/github/callback", githubCallback);
 
 // ==========================
 // Protected Routes
@@ -68,4 +81,15 @@ router.get(
   }
 );
 
+// Forgot Password
+router.post("/forgot-password", forgotPassword);
+
+// Reset Password
+router.post("/reset-password/:token", resetPassword);
+
 export default router;
+
+
+// Forgot Password
+
+// Reset Password

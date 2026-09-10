@@ -133,7 +133,12 @@ export default function RepositoriesPage() {
       setLoadingGithubRepos(true);
       const res = await ApiClient.get('/github/repositories');
       if (res.success) {
-        setGithubRepos(res.repositories);
+        // Filter out repositories that are already in the database
+        const existingFullNames = repositories.map(r => r.fullName.toLowerCase());
+        const availableRepos = res.repositories.filter(
+          repo => !existingFullNames.includes(repo.fullName.toLowerCase())
+        );
+        setGithubRepos(availableRepos);
       }
     } catch (err) {
       showToast("Failed to fetch GitHub repositories");
@@ -317,7 +322,8 @@ export default function RepositoriesPage() {
       }
     } catch (error) {
       console.error(error);
-      showToast('Error connecting repository');
+      const errorMsg = error.response?.data?.message || 'Error connecting repository';
+      showToast(errorMsg);
     }
   };
 

@@ -22,6 +22,8 @@ import CloudAccountsPage from './pages/CloudAccountsPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+import OAuthCallbackPage from './pages/OAuthCallbackPage'
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -99,6 +101,8 @@ function AppContent() {
 
   return (
     <Routes>
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+      
       {/* Auth Routes (Guest Only) */}
       <Route path="/login" element={
         <GuestGuard>
@@ -113,6 +117,11 @@ function AppContent() {
       <Route path="/forgot-password" element={
         <GuestGuard>
           <ForgotPasswordPage />
+        </GuestGuard>
+      } />
+      <Route path="/reset-password/:token" element={
+        <GuestGuard>
+          <ResetPasswordPage />
         </GuestGuard>
       } />
 

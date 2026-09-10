@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useRole } from '../context/RoleContext';
-import cloudLogo from '../assets/cloud1.png';
+// Missing cloud1.png import removed
 import ApiClient from '../utils/api';
 import './Sidebar.css';
 
@@ -176,7 +176,10 @@ export default function Sidebar({ isOpen, onClose }) {
       {/* Brand */}
       <div className="sidebar-brand">
         <div className="sidebar-logo-icon">
-          <img src={cloudLogo} alt="Logo" className="brand-cloud-icon" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="brand-cloud-icon" style={{ width: '24px', height: '24px' }}>
+            <path d="M30 18.3333C30 13.731 26.269 10 21.6667 10C18.4239 10 15.6146 11.854 14.1506 14.5422C13.4357 14.1866 12.5855 14 11.6667 14C8.90524 14 6.66667 16.2386 6.66667 19C6.66667 19.349 6.70244 19.6896 6.77028 20.0182C4.05342 20.6725 2 23.1378 2 26.0606C2 29.3409 4.65909 32 7.93939 32H28.6667C33.269 32 37 28.269 37 23.6667C37 19.5398 33.9922 16.1158 30 15.4208V18.3333Z" stroke="#4F8AFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 22H24M16 22L19 19M16 22L19 25M24 22L21 19M24 22L21 25" stroke="#A855F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </div>
         <div className="sidebar-brand-text">
           <h1 className="sidebar-title">CloudOps</h1>

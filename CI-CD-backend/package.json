@@ -31,6 +31,7 @@
     "mongoose": "^9.8.1",
     "morgan": "^1.11.0",
     "node-ssh": "^13.2.1",
+    "resend": "^6.27.0",
     "simple-git": "^3.36.0",
     "socket.io": "^4.8.3",
     "winston": "^3.19.0",
