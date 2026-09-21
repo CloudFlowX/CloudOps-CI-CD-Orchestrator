@@ -21,7 +21,8 @@ import {
   Radio,
   ExternalLink,
   ShieldCheck,
-  Zap
+  Zap,
+  Trash2
 } from 'lucide-react';
 import './RepositoriesPage.css';
 
@@ -141,7 +142,12 @@ export default function RepositoriesPage() {
         setGithubRepos(availableRepos);
       }
     } catch (err) {
-      showToast("Failed to fetch GitHub repositories");
+      if (err.response?.status === 401) {
+        showToast("GitHub token expired or missing. Please reconnect.");
+        setIsGithubConnected(false); // Reset to show the Connect button
+      } else {
+        showToast("Failed to fetch GitHub repositories");
+      }
     } finally {
       setLoadingGithubRepos(false);
     }
@@ -268,6 +274,22 @@ export default function RepositoriesPage() {
     } catch (error) {
       console.error(error);
       showToast('Error updating repository status');
+    }
+  };
+
+  const handleDeleteRepository = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete the repository "${name}"? This will not delete it from GitHub, only from CloudOps.`)) {
+      return;
+    }
+    try {
+      const res = await ApiClient.delete(`/repositories/${id}`);
+      if (res.success) {
+        showToast(`Repository "${name}" deleted successfully.`);
+        fetchRepositories();
+      }
+    } catch (error) {
+      console.error(error);
+      showToast('Error deleting repository');
     }
   };
 
@@ -601,6 +623,15 @@ export default function RepositoriesPage() {
                   >
                     <Unplug size={14} />
                     <span>{repo.status === 'Connected' ? 'Disconnect' : 'Connect'}</span>
+                  </button>
+
+                  <button
+                    className="action-btn btn-delete"
+                    onClick={() => handleDeleteRepository(repo.id, repo.name)}
+                    style={{ color: '#ff4d4f', borderColor: 'transparent' }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete</span>
                   </button>
                 </>
               )}

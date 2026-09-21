@@ -1,7 +1,7 @@
 import Pipeline from "../models/pipeline.model.js";
 import Repository from "../models/repository.model.js";
 import CloudAccount from "../models/cloudAccount.model.js";
-import { EC2Client, DescribeInstancesCommand } from "@aws-sdk/client-ec2";
+import { EC2Client, DescribeInstancesCommand, AuthorizeSecurityGroupIngressCommand } from "@aws-sdk/client-ec2";
 import { NodeSSH } from "node-ssh";
 import mongoose from "mongoose";
 import { getIO } from "../config/socket.js";
@@ -309,9 +309,33 @@ export const executePipelineJob = async (pipelineId) => {
                  },
                });
                const data = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
-               if (data.Reservations?.[0]?.Instances?.[0]?.PublicIpAddress) {
-                 publicIp = data.Reservations[0].Instances[0].PublicIpAddress;
-                 pipeline.deployedUrl = `http://${publicIp}:${pipeline.appPort || 5003}`;
+               const instanceInfo = data.Reservations?.[0]?.Instances?.[0];
+               if (instanceInfo?.PublicIpAddress) {
+                 publicIp = instanceInfo.PublicIpAddress;
+                 const portToOpen = pipeline.appPort || 5003;
+                 pipeline.deployedUrl = `http://${publicIp}:${portToOpen}`;
+                 
+                 // Automatically open the port in the Security Group!
+                 try {
+                   const sgId = instanceInfo.SecurityGroups?.[0]?.GroupId;
+                   if (sgId) {
+                     onLog(`[DEPLOY] Ensuring port ${portToOpen} is open in Security Group...`);
+                     await ec2Client.send(new AuthorizeSecurityGroupIngressCommand({
+                       GroupId: sgId,
+                       IpPermissions: [{
+                         IpProtocol: 'tcp', FromPort: portToOpen, ToPort: portToOpen,
+                         IpRanges: [{ CidrIp: '0.0.0.0/0' }]
+                       }]
+                     }));
+                     onLog(`[DEPLOY] Port ${portToOpen} is now open to the public.`);
+                   }
+                 } catch (sgErr) {
+                   if (sgErr.name === 'InvalidPermission.Duplicate') {
+                      onLog(`[DEPLOY] Port ${portToOpen} is already open.`);
+                   } else {
+                      onLog(`[WARN] Could not automatically open port ${portToOpen}: ${sgErr.message}`);
+                   }
+                 }
                }
              }
            } catch (err) {
@@ -329,20 +353,38 @@ export const executePipelineJob = async (pipelineId) => {
          // 2. SSH Connection
          const ssh = new NodeSSH();
          const sshKeyPath = process.env.EC2_SSH_KEY_PATH;
-         const sshUsername = process.env.EC2_USERNAME || 'ubuntu';
 
          if (!sshKeyPath) {
            throw new Error("EC2_SSH_KEY_PATH is not defined in backend .env");
          }
 
-         try {
-           await ssh.connect({
-             host: publicIp,
-             username: sshUsername,
-             privateKeyPath: sshKeyPath,
-           });
-           onLog(`[DEPLOY] SSH Connection established ✓`);
+         const usernamesToTry = [process.env.EC2_USERNAME || 'ubuntu', 'ec2-user'];
+         let connected = false;
+         let sshUsername = '';
 
+         for (const username of usernamesToTry) {
+           try {
+             onLog(`[DEPLOY] Trying SSH with username: ${username}`);
+             await ssh.connect({
+               host: publicIp,
+               username: username,
+               privateKeyPath: sshKeyPath,
+               readyTimeout: 20000,
+             });
+             connected = true;
+             sshUsername = username;
+             onLog(`[DEPLOY] SSH Connection successful with ${username}! 🚀`);
+             break; // Stop trying if connected
+           } catch (err) {
+             onLog(`[DEPLOY] SSH failed with ${username}. Retrying if possible...`);
+           }
+         }
+
+         if (!connected) {
+           throw new Error("All configured SSH authentication methods failed. Please check your .pem file and EC2 OS username.");
+         }
+
+         try {
            // Helper for running SSH commands
            const runSSH = async (cmd) => {
              onLog(`[EC2] $ ${cmd}`);
@@ -365,15 +407,27 @@ export const executePipelineJob = async (pipelineId) => {
              await runSSH(`git clone ${repository.githubUrl} ${repoName}`);
            }
 
-           // 4. Install Dependencies
-           onLog(`[DEPLOY] Installing dependencies...`);
-           await runSSH(`cd ${targetDir} && npm install`);
+           // 4. Check App Type & Install Dependencies
+           onLog(`[DEPLOY] Checking repository type...`);
+           const checkPkgCmd = `[ -f "${targetDir}/package.json" ] && echo "node" || echo "static"`;
+           const repoTypeRes = await ssh.execCommand(checkPkgCmd, { cwd: `/home/${sshUsername}` });
+           const repoType = repoTypeRes.stdout.trim();
 
-           // 5. Start Application (using PM2 if available, or fallback to node)
-           onLog(`[DEPLOY] Starting application on port ${pipeline.appPort || 5003}...`);
-           // Setting PORT env for the app
-           const startCmd = `export PORT=${pipeline.appPort || 5003} && (pm2 restart ${repoName} || pm2 start npm --name "${repoName}" -- start || nohup npm start > app.log 2>&1 &)`;
-           await runSSH(`cd ${targetDir} && ${startCmd}`);
+           if (repoType === "node") {
+             onLog(`[DEPLOY] Node.js project detected. Installing dependencies...`);
+             await runSSH(`cd ${targetDir} && npm install`);
+             
+             // 5. Start Application
+             onLog(`[DEPLOY] Starting Node.js application on port ${pipeline.appPort || 5003}...`);
+             const startCmd = `export PORT=${pipeline.appPort || 5003} && (pm2 restart ${repoName} || pm2 start npm --name "${repoName}" -- start || nohup npm start > app.log 2>&1 &)`;
+             await runSSH(`cd ${targetDir} && ${startCmd}`);
+           } else {
+             onLog(`[DEPLOY] Static website detected (No package.json).`);
+             onLog(`[DEPLOY] Starting static web server on port ${pipeline.appPort || 5003}...`);
+             // Use npx serve for static sites in the background
+             const startCmd = `(pm2 restart ${repoName}-static || pm2 start serve --name "${repoName}-static" -- -s . -p ${pipeline.appPort || 5003} || nohup serve -s . -p ${pipeline.appPort || 5003} > app.log 2>&1 &)`;
+             await runSSH(`cd ${targetDir} && ${startCmd}`);
+           }
 
            onLog(`[DEPLOY] Application is live at ${pipeline.deployedUrl}`);
            onLog(`[DEPLOY] Deployment successful ✓`);
@@ -399,6 +453,21 @@ export const executePipelineJob = async (pipelineId) => {
       try {
         onLog(`[ERROR] Pipeline execution failed: ${error.message || error}`);
         getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "failed" });
+        
+        // Trigger system alert for pipeline failure
+        try {
+          const { triggerAlert } = await import("../utils/alertHelper.js");
+          await triggerAlert({
+            title: `Pipeline Execution Failed: ${pipeline.name}`,
+            service: pipeline.name,
+            message: `Deployment failed during execution phase. Error: ${error.message || error}`,
+            severity: "Critical",
+            metric: "Deployment",
+            threshold: "Success",
+            currentValue: "Failed"
+          });
+        } catch(e) { console.error("Alert trigger failed", e) }
+        
       } catch (err) {}
       logger.error("Async pipeline execution failed:", error);
     }
@@ -1074,19 +1143,30 @@ export const scalePipeline = async (req, res) => {
 export const rollbackPipeline = async (req, res) => {
   try {
     const { id } = req.params;
-    const { version } = req.body;
+    const { version } = req.body; // Expecting a git commit hash or branch name
 
     const pipeline = await Pipeline.findById(id);
     if (!pipeline) {
       return res.status(404).json({ success: false, message: "Pipeline not found" });
     }
 
-    // Update version tag in DB
-    pipeline.branch = version || "previous-stable"; // Store version as branch for now
+    if (!version) {
+       return res.status(400).json({ success: false, message: "Version (commit/branch) is required for rollback" });
+    }
+
+    // Set the branch to the previous version (commit hash or branch)
+    pipeline.branch = version;
+    pipeline.status = "pending";
     await pipeline.save();
 
-    return res.status(200).json({ success: true, message: `Rolled back to ${version}`, pipeline });
+    // Trigger the pipeline execution with the old version
+    executePipelineJob(pipeline._id).catch(err => {
+      logger.error(`Rollback execution failed for pipeline ${id}:`, err);
+    });
+
+    return res.status(200).json({ success: true, message: `Rollback initiated for version/commit: ${version}`, pipeline });
   } catch (error) {
+    logger.error("ROLLBACK ERROR:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

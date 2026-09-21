@@ -11,6 +11,7 @@ import app from "./app.js";
 import connectDB from "./config/db.js";
 import logger from "./config/logger.js";
 import { initSocket } from "./config/socket.js";
+import { startHealthChecker } from "./services/health.service.js";
 import http from "http";
 
 const PORT = process.env.PORT || 5002;
@@ -34,10 +35,13 @@ const startServer = async () => {
     const server = http.createServer(app);
     initSocket(server);
 
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       logger.info(`🚀 Cloud Orchestrator API is running on port ${PORT}`);
       logger.info(`📍 Environment: ${process.env.NODE_ENV || "development"}`);
       logger.info(`🔗 Health Check: http://localhost:${PORT}/`);
+      
+      // Start Health Checker
+      startHealthChecker();
     });
   } catch (error) {
     logger.error("❌ Failed to start server: " + error.message);

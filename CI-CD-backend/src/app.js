@@ -13,7 +13,14 @@ import environmentRoutes from "./routes/environment.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import auditLogRoutes from "./routes/auditLog.routes.js";
 import alertRoutes from "./routes/alert.routes.js";
+import alertRuleRoutes from "./routes/alertRule.routes.js";
 const app = express();
+
+// ==========================
+// Proxy Middleware (Must be before CORS/body-parsers)
+// ==========================
+import { proxySubdomains } from "./middleware/proxy.middleware.js";
+app.use(proxySubdomains);
 
 // ==========================
 // Middlewares
@@ -66,6 +73,7 @@ app.use("/api/v1/audit-logs", auditLogRoutes);
 
 // Alerts Routes
 app.use("/api/v1/alerts", alertRoutes);
+app.use("/api/v1/alert-rules", alertRuleRoutes);
 
 // ==========================
 // Health Check Route

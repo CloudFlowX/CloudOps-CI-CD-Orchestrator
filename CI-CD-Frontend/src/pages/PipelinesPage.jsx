@@ -293,7 +293,10 @@ export default function PipelinesPage() {
         buildCommand: newPipeline.buildCommand,
         dockerfilePath: newPipeline.dockerfilePath,
         environment: newPipeline.environment,
-        deploymentTarget: newPipeline.deploymentTarget
+        deploymentTarget: newPipeline.deploymentTarget,
+        cloudAccount: newPipeline.cloudAccount,
+        ec2InstanceId: newPipeline.ec2InstanceId?.trim(),
+        appPort: newPipeline.appPort
       };
 
       const res = await ApiClient.post('/pipelines', payload);
@@ -329,7 +332,10 @@ export default function PipelinesPage() {
         buildCommand: editPipeline.buildCommand,
         dockerfilePath: editPipeline.dockerfilePath,
         environment: editPipeline.environment,
-        deploymentTarget: editPipeline.deploymentTarget
+        deploymentTarget: editPipeline.deploymentTarget,
+        cloudAccount: editPipeline.cloudAccount,
+        ec2InstanceId: editPipeline.ec2InstanceId?.trim(),
+        appPort: editPipeline.appPort
       };
 
       const res = await ApiClient.put(`/pipelines/${editPipeline.id}`, payload);
@@ -384,22 +390,22 @@ export default function PipelinesPage() {
   };
 
   const renderStatusBadge = (status) => {
-    switch (status) {
-      case 'Success':
+    switch (status?.toLowerCase()) {
+      case 'success':
         return (
           <span className="badge badge-success">
             <CheckCircle2 size={13} />
             Success
           </span>
         );
-      case 'Failed':
+      case 'failed':
         return (
           <span className="badge badge-failed">
             <XCircle size={13} />
             Failed
           </span>
         );
-      case 'Running':
+      case 'running':
         return (
           <span className="badge badge-running">
             <RefreshCw size={13} className="spin-icon" />

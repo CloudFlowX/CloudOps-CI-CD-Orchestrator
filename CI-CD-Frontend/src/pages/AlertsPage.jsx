@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import './AlertsPage.css';
 import {
   AlertTriangle,
@@ -141,7 +142,7 @@ const INITIAL_RULES = [
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState([]);
-  const [rules, setRules] = useState(INITIAL_RULES);
+  const [rules, setRules] = useState([]);
   const [activeTab, setActiveTab] = useState('Active');
   const [searchQuery, setSearchQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
@@ -200,7 +201,7 @@ export default function AlertsPage() {
             threshold: a.threshold,
             value: a.currentValue,
             recommendation: "Check system metrics",
-            ruleName: "Dynamic Rule"
+            ruleName: "System Generated"
           }
         })));
       }
@@ -209,8 +210,60 @@ export default function AlertsPage() {
     }
   };
 
-  React.useEffect(() => {
+  const fetchRules = async () => {
+    try {
+      const res = await ApiClient.get('/alert-rules');
+      if (res.success && res.rules) {
+        setRules(res.rules.map(r => ({
+          id: r._id,
+          name: r.name,
+          service: r.service,
+          condition: r.condition,
+          channels: r.channels,
+          severity: r.severity,
+          enabled: r.enabled
+        })));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
     fetchAlerts();
+    fetchRules();
+
+    const socket = io("http://localhost:5002", {
+      withCredentials: true,
+    });
+
+    socket.on("new_alert", (a) => {
+      // Show toast
+      showToast(`New ${a.severity} Alert: ${a.title}`, 'danger');
+      // Add to beginning of array
+      setAlerts(prev => [{
+          id: a.id,
+          title: a.title,
+          service: a.service,
+          description: a.description,
+          severity: a.severity,
+          status: a.status,
+          timeAgo: 'Just now',
+          timestamp: a.timestamp,
+          isSilenced: false,
+          details: {
+            metric: "N/A",
+            threshold: "N/A",
+            value: "N/A",
+            recommendation: "Check system metrics",
+            ruleName: "System Generated"
+          }
+      }, ...prev]);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   const handleResolveAlert = async (e, id) => {
@@ -303,30 +356,33 @@ export default function AlertsPage() {
   };
 
   // Rule Toggle Handler
-  const handleToggleRule = (ruleId) => {
-    setRules(prev =>
-      prev.map(r => {
-        if (r.id === ruleId) {
-          const nextEnabled = !r.enabled;
-          showToast(
-            `Rule "${r.name}" has been ${nextEnabled ? 'enabled' : 'disabled'}.`,
-            nextEnabled ? 'success' : 'warning'
-          );
-          return { ...r, enabled: nextEnabled };
-        }
-        return r;
-      })
-    );
+  const handleToggleRule = async (ruleId) => {
+    try {
+      const res = await ApiClient.put(`/alert-rules/${ruleId}/toggle`);
+      if (res.success) {
+        setRules(prev => prev.map(r => r.id === ruleId ? { ...r, enabled: res.rule.enabled } : r));
+        showToast(`Rule has been ${res.rule.enabled ? 'enabled' : 'disabled'}.`, res.rule.enabled ? 'success' : 'warning');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to toggle rule');
+    }
   };
 
-  const handleDeleteRule = (ruleId, e) => {
+  const handleDeleteRule = async (ruleId, e) => {
     e?.stopPropagation();
-    setRules(prev => prev.filter(r => r.id !== ruleId));
-    showToast('Alert rule deleted successfully.', 'danger');
+    try {
+      await ApiClient.delete(`/alert-rules/${ruleId}`);
+      setRules(prev => prev.filter(r => r.id !== ruleId));
+      showToast('Alert rule deleted successfully.', 'danger');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to delete rule');
+    }
   };
 
   // Handle Create Rule Submission
-  const handleCreateRuleSubmit = (e) => {
+  const handleCreateRuleSubmit = async (e) => {
     e.preventDefault();
     if (!newRule.name.trim() || !newRule.condition.trim()) {
       showToast('Please fill out rule name and condition.', 'warning');
@@ -338,28 +394,44 @@ export default function AlertsPage() {
     if (newRule.channelEmail) selectedChannels.push('Email');
     if (newRule.channelPagerDuty) selectedChannels.push('PagerDuty');
 
-    const created = {
-      id: Date.now(),
-      name: newRule.name,
-      service: newRule.service,
-      condition: newRule.condition,
-      channels: selectedChannels.length > 0 ? selectedChannels : ['Slack'],
-      severity: newRule.severity,
-      enabled: true
-    };
-
-    setRules([created, ...rules]);
-    setIsCreateRuleModalOpen(false);
-    setNewRule({
-      name: '',
-      service: 'E-commerce API',
-      condition: '',
-      severity: 'Warning',
-      channelSlack: true,
-      channelEmail: false,
-      channelPagerDuty: false
-    });
-    showToast(`New alert rule "${created.name}" created!`, 'success');
+    try {
+      const res = await ApiClient.post('/alert-rules', {
+        name: newRule.name,
+        service: newRule.service,
+        condition: newRule.condition,
+        channels: selectedChannels.length > 0 ? selectedChannels : ['Slack'],
+        severity: newRule.severity,
+        enabled: true
+      });
+      
+      if (res.success) {
+        const r = res.rule;
+        setRules([{
+          id: r._id,
+          name: r.name,
+          service: r.service,
+          condition: r.condition,
+          channels: r.channels,
+          severity: r.severity,
+          enabled: r.enabled
+        }, ...rules]);
+        
+        setIsCreateRuleModalOpen(false);
+        setNewRule({
+          name: '',
+          service: 'E-commerce API',
+          condition: '',
+          severity: 'Warning',
+          channelSlack: true,
+          channelEmail: false,
+          channelPagerDuty: false
+        });
+        showToast(`New alert rule "${r.name}" created!`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to create rule', 'error');
+    }
   };
 
   const renderSeverityIcon = (severity) => {
