@@ -258,7 +258,7 @@ export default function PipelinesPage() {
     try {
       const res = await ApiClient.post(`/pipelines/${pipeline.id}/trigger`);
       if (res.success) {
-        showToast(`Pipeline ${pipeline.name} executed successfully!`, 'success');
+        showToast(`Pipeline ${pipeline.name} triggered successfully. Execution has started in the background!`, 'success');
         fetchPipelines();
       }
     } catch (error) {
