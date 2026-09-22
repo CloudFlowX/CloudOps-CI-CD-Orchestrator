@@ -102,7 +102,7 @@ export default function RepositoriesPage() {
         showToast(res.message || "Failed to initiate GitHub login");
       }
     } catch (err) {
-      showToast(err.response?.data?.message || err.message || "Failed to initiate GitHub login");
+      showToast(err.message || "Failed to initiate GitHub login");
     }
   };
 
@@ -142,7 +142,7 @@ export default function RepositoriesPage() {
         setGithubRepos(availableRepos);
       }
     } catch (err) {
-      if (err.response?.status === 401) {
+      if (err.status === 401) {
         showToast("GitHub token expired or missing. Please reconnect.");
         setIsGithubConnected(false); // Reset to show the Connect button
       } else {
@@ -344,7 +344,7 @@ export default function RepositoriesPage() {
       }
     } catch (error) {
       console.error(error);
-      const errorMsg = error.response?.data?.message || 'Error connecting repository';
+      const errorMsg = error.message || 'Error connecting repository';
       showToast(errorMsg);
     }
   };
