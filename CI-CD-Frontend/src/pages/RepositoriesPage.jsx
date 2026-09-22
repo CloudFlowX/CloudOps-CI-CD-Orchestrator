@@ -88,7 +88,7 @@ export default function RepositoriesPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     
-    if (code && !user?.githubUsername) {
+    if (code) {
       handleGithubCallback(code);
     }
   }, [user]);
