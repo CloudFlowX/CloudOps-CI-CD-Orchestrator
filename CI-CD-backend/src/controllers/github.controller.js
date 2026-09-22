@@ -317,6 +317,9 @@ export const getRepositories = async (req, res) => {
     return res.status(200).json({ success: true, repositories: repos });
   } catch (error) {
     logger.error("GET GITHUB REPOS ERROR:", error.response?.data || error);
+    if (error.response && error.response.status === 401) {
+      return res.status(401).json({ success: false, message: "GitHub token expired or invalid" });
+    }
     return res.status(500).json({ success: false, message: "Failed to fetch repositories from GitHub" });
   }
 };
@@ -339,6 +342,9 @@ export const getBranches = async (req, res) => {
     return res.status(200).json({ success: true, branches });
   } catch (error) {
     logger.error("GET GITHUB BRANCHES ERROR:", error.response?.data || error);
+    if (error.response && error.response.status === 401) {
+      return res.status(401).json({ success: false, message: "GitHub token expired or invalid" });
+    }
     return res.status(500).json({ success: false, message: "Failed to fetch branches from GitHub" });
   }
 };
