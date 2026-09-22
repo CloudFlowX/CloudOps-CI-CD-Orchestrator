@@ -124,7 +124,7 @@ export default function RepositoriesPage() {
 
   // Fetch GitHub repos when modal opens
   React.useEffect(() => {
-    if (isConnectModalOpen && isGithubConnected && githubRepos.length === 0) {
+    if (isConnectModalOpen && isGithubConnected) {
       fetchGithubRepos();
     }
   }, [isConnectModalOpen, isGithubConnected]);
