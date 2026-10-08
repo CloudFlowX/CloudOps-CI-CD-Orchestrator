@@ -491,52 +491,60 @@ export default function PipelinesPage() {
       {/* Stats Bar */}
       <div className="pipelines-stats-grid">
         <div className="stat-card">
-          <div className="stat-header">
-            <span className="stat-label">Total Pipelines</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper total">
-              <Layers size={18} />
+              <Layers size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Total Pipelines</span>
+              <div className="stat-value">{stats.total}</div>
             </div>
           </div>
-          <div className="stat-value">{stats.total}</div>
           <div className="stat-footer">
             <span className="stat-trend neutral">Across all repositories</span>
           </div>
         </div>
 
         <div className="stat-card running-card">
-          <div className="stat-header">
-            <span className="stat-label">Running</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper running">
-              <RefreshCw size={18} className="spin-icon" />
+              <RefreshCw size={22} className="spin-icon" />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Running</span>
+              <div className="stat-value running-color">{stats.running}</div>
             </div>
           </div>
-          <div className="stat-value running-color">{stats.running}</div>
           <div className="stat-footer">
             <span className="stat-indicator pulse-blue">Active execution</span>
           </div>
         </div>
 
         <div className="stat-card successful-card">
-          <div className="stat-header">
-            <span className="stat-label">Successful</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper successful">
-              <CheckCircle2 size={18} />
+              <CheckCircle2 size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Successful</span>
+              <div className="stat-value success-color">{stats.successful}</div>
             </div>
           </div>
-          <div className="stat-value success-color">{stats.successful}</div>
           <div className="stat-footer">
             <span className="stat-trend positive">84.4% success rate</span>
           </div>
         </div>
 
         <div className="stat-card failed-card">
-          <div className="stat-header">
-            <span className="stat-label">Failed</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper failed">
-              <XCircle size={18} />
+              <XCircle size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Failed</span>
+              <div className="stat-value failed-color">{stats.failed}</div>
             </div>
           </div>
-          <div className="stat-value failed-color">{stats.failed}</div>
           <div className="stat-footer">
             <span className="stat-trend negative">Requires attention</span>
           </div>

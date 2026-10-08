@@ -260,7 +260,7 @@ export default function LogsPage() {
       <div className="logs-stats-grid">
         <div className="stat-card total-card">
           <div className="stat-icon-wrapper cyan">
-            <Terminal size={20} />
+            <Terminal size={22} />
           </div>
           <div className="stat-content">
             <span className="stat-label">Total Logs</span>
@@ -270,7 +270,7 @@ export default function LogsPage() {
 
         <div className="stat-card info-card">
           <div className="stat-icon-wrapper blue">
-            <Info size={20} />
+            <Info size={22} />
           </div>
           <div className="stat-content">
             <span className="stat-label">Info</span>
@@ -280,7 +280,7 @@ export default function LogsPage() {
 
         <div className="stat-card warn-card">
           <div className="stat-icon-wrapper yellow">
-            <AlertTriangle size={20} />
+            <AlertTriangle size={22} />
           </div>
           <div className="stat-content">
             <span className="stat-label">Warnings</span>
@@ -290,7 +290,7 @@ export default function LogsPage() {
 
         <div className="stat-card error-card">
           <div className="stat-icon-wrapper red">
-            <XCircle size={20} />
+            <XCircle size={22} />
           </div>
           <div className="stat-content">
             <span className="stat-label">Errors</span>

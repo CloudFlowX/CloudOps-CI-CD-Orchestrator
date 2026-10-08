@@ -24,44 +24,8 @@ import './UsersPage.css';
 import ApiClient from '../utils/api';
 // Removing INITIAL_USERS mock
 
-const INITIAL_TEAMS = [
-  {
-    id: 'platform',
-    name: 'Platform',
-    count: 4,
-    description: 'Infrastructure, Kubernetes clusters, CI/CD runner management & security',
-    color: '#a855f7',
-    members: ['Kunal Kumar', 'Priya Sharma', 'Vikram Mehta', 'Alex Rivera']
-  },
-  {
-    id: 'backend',
-    name: 'Backend',
-    count: 3,
-    description: 'Microservices architecture, REST/GraphQL APIs, database migrations & queue workers',
-    color: '#3b82f6',
-    members: ['Kunal Kumar', 'Rahul Singh', 'Sneha Gupta']
-  },
-  {
-    id: 'frontend',
-    name: 'Frontend',
-    count: 2,
-    description: 'User dashboard interface, component design system, analytics & Web Vitals',
-    color: '#06b6d4',
-    members: ['Priya Sharma', 'Anjali Patel']
-  },
-  {
-    id: 'devops',
-    name: 'DevOps',
-    count: 1,
-    description: 'Terraform IaC scripts, deployment pipelines, site reliability & incident response',
-    color: '#22c55e',
-    members: ['Vikram Mehta']
-  }
-];
-
 export default function UsersPage() {
   const [users, setUsers] = useState([]);
-  const [teams, setTeams] = useState(INITIAL_TEAMS);
   
   React.useEffect(() => {
     fetchUsers();
@@ -440,7 +404,6 @@ export default function UsersPage() {
                 <th>Role</th>
                 <th>Status</th>
                 <th>Last Active</th>
-                <th>Teams</th>
                 <th className="th-actions">Actions</th>
               </tr>
             </thead>
@@ -498,20 +461,6 @@ export default function UsersPage() {
                       <span className="last-active-text">{user.lastActive}</span>
                     </td>
 
-                    {/* Teams */}
-                    <td className="td-teams">
-                      <div className="teams-badges-container">
-                        {user.teams && user.teams.length > 0 ? (
-                          user.teams.map((team, idx) => (
-                            <span key={idx} className="team-badge">
-                              {team}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="no-teams-badge">-</span>
-                        )}
-                      </div>
-                    </td>
 
                     {/* Actions */}
                     <td className="td-actions">
@@ -552,74 +501,6 @@ export default function UsersPage() {
               )}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* 5. TEAMS SECTION */}
-      <div className="teams-section-container">
-        <div className="teams-section-header">
-          <div className="teams-title-group">
-            <Layers className="teams-title-icon" />
-            <h2 className="teams-section-title">Team Structure</h2>
-          </div>
-          <span className="teams-count-tag">{teams.length} Active Teams</span>
-        </div>
-
-        <div className="teams-cards-grid">
-          {teams.map((team) => (
-            <div key={team.id} className="team-card glass-card">
-              <div className="team-card-top">
-                <div className="team-badge-header">
-                  <div
-                    className="team-icon-indicator"
-                    style={{ backgroundColor: team.color }}
-                  />
-                  <h3 className="team-name">{team.name}</h3>
-                </div>
-                <span className="team-member-count">
-                  {team.count} {team.count === 1 ? 'member' : 'members'}
-                </span>
-              </div>
-
-              <p className="team-description">{team.description}</p>
-
-              <div className="team-card-footer">
-                <div className="team-avatar-stack">
-                  {team.members.map((member, i) => {
-                    const initials = member
-                      .split(' ')
-                      .map(n => n[0])
-                      .join('');
-                    return (
-                      <div
-                        key={i}
-                        className="stack-avatar"
-                        title={member}
-                        style={{
-                          zIndex: team.members.length - i,
-                          backgroundColor: `${team.color}30`,
-                          borderColor: team.color,
-                          color: '#f1f5f9'
-                        }}
-                      >
-                        {initials}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <button
-                  className="btn-manage-team"
-                  onClick={() =>
-                    showNotification(`Managing team permissions for ${team.name}`)
-                  }
-                >
-                  Manage
-                  <ChevronRight className="btn-arrow-icon" />
-                </button>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -694,21 +575,6 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Assign Teams</label>
-                <div className="teams-checkbox-grid">
-                  {['Platform', 'Backend', 'Frontend', 'DevOps'].map((t) => (
-                    <label key={t} className="checkbox-item">
-                      <input
-                        type="checkbox"
-                        checked={inviteForm.teams.includes(t)}
-                        onChange={() => toggleInviteTeam(t)}
-                      />
-                      <span>{t}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
 
               <div className="modal-footer">
                 <button
@@ -802,21 +668,6 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Assigned Teams</label>
-                <div className="teams-checkbox-grid">
-                  {['Platform', 'Backend', 'Frontend', 'DevOps'].map((t) => (
-                    <label key={t} className="checkbox-item">
-                      <input
-                        type="checkbox"
-                        checked={editForm.teams.includes(t)}
-                        onChange={() => toggleEditTeam(t)}
-                      />
-                      <span>{t}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
 
               <div className="modal-footer">
                 <button

@@ -28,6 +28,7 @@ import {
   Key,
   Database,
   Lock,
+  ShieldCheck,
   Cloud,
   ChevronRight,
   ShieldAlert
@@ -276,53 +277,68 @@ export default function EnvironmentsPage() {
       {/* Stats Quick Overview Bar */}
       <div className="overview-stats-grid">
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Total Environments</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper blue">
-              <Server size={20} />
+              <Server size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Total Environments</span>
+              <div className="stat-value">{totalEnvs}</div>
             </div>
           </div>
-          <div className="stat-value">{totalEnvs}</div>
+          <div className="stat-subtext">Across all providers</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Healthy Systems</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper green">
-              <CheckCircle2 size={20} />
+              <ShieldCheck size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Healthy Systems</span>
+              <div className="stat-value text-green">{healthyCount}</div>
             </div>
           </div>
-          <div className="stat-value text-green">{healthyCount}</div>
+          <div className="stat-subtext text-green">100% healthy</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Degraded</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper yellow">
-              <AlertTriangle size={20} />
+              <AlertTriangle size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Degraded</span>
+              <div className="stat-value text-yellow">{degradedCount}</div>
             </div>
           </div>
-          <div className="stat-value">{degradedCount}</div>
+          <div className="stat-subtext text-yellow">Needs attention</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Offline</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper gray">
-              <XCircle size={20} />
+              <XCircle size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Offline</span>
+              <div className="stat-value">{offlineCount}</div>
             </div>
           </div>
-          <div className="stat-value">{offlineCount}</div>
+          <div className="stat-subtext">Not running</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Active Microservices</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper purple">
-              <Layers size={20} />
+              <Layers size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Active Microservices</span>
+              <div className="stat-value">{totalServices}</div>
             </div>
           </div>
-          <div className="stat-value">{totalServices}</div>
+          <div className="stat-subtext">Deployed services</div>
         </div>
       </div>
 

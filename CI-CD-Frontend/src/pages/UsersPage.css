@@ -52,6 +52,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .users-page-title {
@@ -827,6 +828,8 @@
   border-radius: var(--radius-xl);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
   animation: fadeIn 0.25s ease forwards;
+  max-width: calc(100% - 32px);
+  width: 90%;
 }
 
 .modal-container.modal-small {
@@ -1057,4 +1060,40 @@
 
 .mt-4 {
   margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+  .users-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .users-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .teams-cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .teams-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .teams-checkbox-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .teams-checkbox-grid {
+    grid-template-columns: 1fr !important;
+  }
 }

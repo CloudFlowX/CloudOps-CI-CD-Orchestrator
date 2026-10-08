@@ -52,11 +52,7 @@ const navItems = [
   { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardList, path: '/audit-logs' }
 ];
 
-const usageData = [
-  { name: 'AWS', value: 62, color: '#f97316' },
-  { name: 'Azure', value: 30, color: '#3b82f6' },
-  { name: 'Others', value: 8, color: '#a855f7' }
-];
+
 
 // We will fetch accounts from API
 
@@ -67,10 +63,34 @@ const providerOptions = [
   { value: 'digitalocean', label: 'DigitalOcean', color: '#06b6d4' },
 ];
 
+const AWSIcon = ({ className = "w-5 h-5", color = "currentColor" }) => (
+  <img src="/amazon.png" alt="AWS" className={className} style={{ objectFit: 'contain', width: '100%', height: '100%', transform: 'scale(2.2)', mixBlendMode: 'lighten' }} />
+);
+
+const GCPIcon = ({ className = "w-5 h-5", color = "currentColor" }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill={color !== "currentColor" ? color : "#4285F4"}/>
+    <path d="M12.5 7v3.5l3.5 3.5-1 1-4.5-4.5V7h2z" fill="#34A853"/>
+  </svg>
+);
+
+const AzureIcon = ({ className = "w-5 h-5", color = "currentColor" }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M5.483 21.3H24L14.025 4.013h-2.9L5.483 21.3zM13.25 2.7l-9.11 16.48-4.14-7.1 9.1-16.49h4.15z" fill={color !== "currentColor" ? color : "#0089D6"}/>
+  </svg>
+);
+
 export default function Sidebar({ isOpen, onClose }) {
   const { currentRole, setCurrentRole } = useRole();
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState([]);
+  const [usageStats, setUsageStats] = useState({
+    totalMins: 5000,
+    usedMins: 0,
+    percent: 0,
+    monthName: new Date().toLocaleString('default', { month: 'short', year: 'numeric' }),
+    distribution: [{ name: 'No Usage', value: 100, color: '#334155' }]
+  });
   const [expandedAccount, setExpandedAccount] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
@@ -95,6 +115,57 @@ export default function Sidebar({ isOpen, onClose }) {
   };
 
   useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        const res = await ApiClient.get('/pipelines');
+        if (res.success) {
+          const pipelines = res.pipelines;
+          const now = new Date();
+          const currentMonth = now.getMonth();
+          const currentYear = now.getFullYear();
+          const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+          
+          const monthPipelines = pipelines.filter(p => {
+            const d = new Date(p.createdAt);
+            return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+          });
+          
+          const usedMins = monthPipelines.length * 15; // Assume 15 mins per pipeline
+          const totalMins = 5000;
+          const percent = Math.min(100, Math.round((usedMins / totalMins) * 100));
+          
+          let aws = 0, azure = 0, gcp = 0, others = 0;
+          monthPipelines.forEach(p => {
+            if (p.deploymentTarget === 'aws') aws++;
+            else if (p.deploymentTarget === 'azure') azure++;
+            else if (p.deploymentTarget === 'gcp') gcp++;
+            else others++;
+          });
+          
+          const totalCount = monthPipelines.length || 1;
+          const dist = [];
+          if (aws > 0) dist.push({ name: 'AWS', value: Math.round((aws/totalCount)*100), color: '#f97316' });
+          if (azure > 0) dist.push({ name: 'Azure', value: Math.round((azure/totalCount)*100), color: '#3b82f6' });
+          if (gcp > 0) dist.push({ name: 'GCP', value: Math.round((gcp/totalCount)*100), color: '#ef4444' });
+          if (others > 0) dist.push({ name: 'Others', value: Math.round((others/totalCount)*100), color: '#a855f7' });
+          
+          if (dist.length === 0) {
+             dist.push({ name: 'No Usage', value: 100, color: '#334155' });
+          }
+
+          setUsageStats({
+            totalMins,
+            usedMins,
+            percent,
+            monthName,
+            distribution: dist
+          });
+        }
+      } catch (error) {
+         console.error('Failed to fetch usage', error);
+      }
+    };
+
     const fetchAccounts = async () => {
       try {
         const res = await ApiClient.get('/cloud-accounts');
@@ -106,6 +177,7 @@ export default function Sidebar({ isOpen, onClose }) {
       }
     };
     fetchAccounts();
+    fetchUsage();
   }, []);
 
   const handleSync = (id, e) => {
@@ -302,11 +374,11 @@ export default function Sidebar({ isOpen, onClose }) {
                   <div className="account-header-main">
                     <div className={`account-icon-wrapper ${account.provider.toLowerCase()}`}>
                       {account.provider === 'AWS' ? (
-                        <Cloud size={16} color="#f97316" />
+                        <AWSIcon className="w-4 h-4" color="#f97316" />
                       ) : account.provider === 'GCP' ? (
-                        <Cloud size={16} color="#ef4444" />
+                        <GCPIcon className="w-4 h-4" color="#ef4444" />
                       ) : (
-                        <Cloud size={16} color="#3b82f6" />
+                        <AzureIcon className="w-4 h-4" color="#3b82f6" />
                       )}
                     </div>
                     <span className={`account-status-indicator ${account.status}`}></span>
@@ -374,7 +446,7 @@ export default function Sidebar({ isOpen, onClose }) {
           <div className="sidebar-section-header">
             <div>
               <h2 className="sidebar-section-title">Usage This Month</h2>
-              <span className="sidebar-section-subtitle">May 2024</span>
+              <span className="sidebar-section-subtitle">{usageStats.monthName}</span>
             </div>
           </div>
 
@@ -393,7 +465,7 @@ export default function Sidebar({ isOpen, onClose }) {
                     formatter={(val) => [`${val}%`, 'Usage']}
                   />
                   <Pie
-                    data={usageData}
+                    data={usageStats.distribution}
                     cx="50%"
                     cy="50%"
                     innerRadius={40}
@@ -402,39 +474,31 @@ export default function Sidebar({ isOpen, onClose }) {
                     dataKey="value"
                     stroke="none"
                   >
-                    {usageData.map((entry, index) => (
+                    {usageStats.distribution.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
               <div className="sidebar-donut-center">
-                <span className="sidebar-donut-percent">78%</span>
+                <span className="sidebar-donut-percent">{usageStats.percent}%</span>
                 <span className="sidebar-donut-sub">used</span>
               </div>
             </div>
 
             <div className="sidebar-usage-summary">
-              <span className="usage-mins-highlight">3,900</span>
-              <span className="usage-mins-total">of 5,000 build mins</span>
+              <span className="usage-mins-highlight">{usageStats.usedMins.toLocaleString()}</span>
+              <span className="usage-mins-total">of {usageStats.totalMins.toLocaleString()} build mins</span>
             </div>
 
             <div className="sidebar-usage-legend">
-              <div className="legend-item">
-                <div className="legend-marker" style={{ backgroundColor: '#f97316' }}></div>
-                <span className="legend-name">AWS</span>
-                <span className="legend-value">62%</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-marker" style={{ backgroundColor: '#3b82f6' }}></div>
-                <span className="legend-name">Azure</span>
-                <span className="legend-value">30%</span>
-              </div>
-              <div className="legend-item">
-                <div className="legend-marker" style={{ backgroundColor: '#a855f7' }}></div>
-                <span className="legend-name">Others</span>
-                <span className="legend-value">8%</span>
-              </div>
+              {usageStats.distribution.map((item, idx) => (
+                <div className="legend-item" key={idx}>
+                  <div className="legend-marker" style={{ backgroundColor: item.color }}></div>
+                  <span className="legend-name">{item.name}</span>
+                  <span className="legend-value">{item.value}%</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -462,7 +526,9 @@ export default function Sidebar({ isOpen, onClose }) {
                       onClick={() => setNewAccount({ ...newAccount, provider: p.value })}
                       style={{ '--provider-color': p.color }}
                     >
-                      <span className={`cloud-provider-badge ${p.value}`}>{p.value}</span>
+                      <span className={`cloud-provider-badge ${p.value}`} style={{ padding: '4px' }}>
+                        {p.value === 'aws' ? <AWSIcon className="w-5 h-5" color={p.color} /> : p.value === 'gcp' ? <GCPIcon className="w-5 h-5" color={p.color} /> : p.value === 'azure' ? <AzureIcon className="w-5 h-5" color={p.color} /> : <Cloud size={18} color={p.color} />}
+                      </span>
                       <span className="cloud-provider-name">{p.label}</span>
                     </button>
                   ))}

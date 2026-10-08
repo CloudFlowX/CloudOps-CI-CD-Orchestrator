@@ -15,7 +15,7 @@ import {
 } from 'recharts';
 import {
   Activity,
-  CheckCircle2,
+  CheckCircle2, Globe, Database,
   AlertTriangle,
   Clock,
   RefreshCw,
@@ -65,19 +65,6 @@ const responseTimeData = timeLabels.map((time, idx) => {
 // Empty array for initial so graph starts from live
 const initialSystemUsageData = [];
 
-// Active Incidents Data (mock)
-const initialIncidents = [
-  {
-    id: 'inc-1',
-    title: 'High latency on User Service',
-    service: 'User Service',
-    time: 'Started 15m ago',
-    severity: 'Warning',
-    status: 'Active',
-    description: 'p95 response time exceeded 200ms threshold (current: 240ms). Autoscaling triggered +2 instances.',
-    ack: false
-  }
-];
 
 // Custom Recharts Tooltip Component
 const CustomTooltip = ({ active, payload, label, unit = '' }) => {
@@ -104,7 +91,7 @@ export default function MonitoringPage() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notification, setNotification] = useState('');
-  const [incidents, setIncidents] = useState(initialIncidents);
+  const [incidents, setIncidents] = useState([]);
   const [sortField, setSortField] = useState('reqPerMin');
   const [sortAsc, setSortAsc] = useState(false);
   
@@ -117,7 +104,7 @@ export default function MonitoringPage() {
     const fetchServices = async () => {
       try {
         const res = await api.get('/pipelines');
-        const pipelines = res.data.data || [];
+        const pipelines = res.pipelines || res.data || [];
         const liveServices = pipelines.map((p, idx) => ({
           id: p._id,
           name: p.name,
@@ -136,7 +123,30 @@ export default function MonitoringPage() {
         console.error(err);
       }
     };
+
+    const fetchIncidents = async () => {
+      try {
+        const res = await api.get('/alerts');
+        if (res.success && res.alerts) {
+          const activeAlerts = res.alerts.filter(a => a.status !== 'Resolved').map(a => ({
+            id: a._id,
+            title: a.title,
+            service: a.service,
+            time: `Started ${new Date(a.createdAt).toLocaleDateString()}`,
+            severity: a.severity,
+            status: a.status,
+            description: a.message,
+            ack: a.status === 'Acknowledged'
+          }));
+          setIncidents(activeAlerts);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
     fetchServices();
+    fetchIncidents();
 
     const socket = io("http://localhost:5002", {
       withCredentials: true,
@@ -254,45 +264,70 @@ export default function MonitoringPage() {
         </div>
       </div>
 
-      {/* 2. Health Status Bar */}
-      <div className="health-bar-container">
-        <div className="health-bar-title-row">
-          <h3>Services Health Overview</h3>
-          <span className="health-summary">4 / 5 Operational</span>
+      {/* 2. Top Stats Row (replaces health bar) */}
+      <div className="overview-stats-grid">
+        <div className="stat-card glass-card">
+          <div className="stat-main-content">
+            <div className="stat-icon-wrapper blue">
+              <Layers size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Total Services</span>
+              <div className="stat-value">5</div>
+            </div>
+          </div>
+          <div className="stat-subtext text-green">
+            <CheckCircle2 size={12} style={{marginRight: 4, display: 'inline-block', verticalAlign: 'middle'}}/>
+            All Operational
+          </div>
         </div>
-        <div className="health-cards-row">
-          {servicesHealth.map(service => {
-            const isHealthy = service.status === 'Healthy';
-            return (
-              <div 
-                key={service.id} 
-                className={`service-health-card ${isHealthy ? 'status-healthy' : 'status-warning'}`}
-              >
-                <div className="health-card-top">
-                  <span className="service-name">{service.name}</span>
-                  {isHealthy ? (
-                    <span className="badge badge-success">
-                      <CheckCircle2 size={13} /> Healthy
-                    </span>
-                  ) : (
-                    <span className="badge badge-warning">
-                      <AlertTriangle size={13} /> Warning
-                    </span>
-                  )}
-                </div>
-                <div className="health-card-metrics">
-                  <div className="mini-metric">
-                    <span className="lbl">Latency</span>
-                    <span className={`val ${!isHealthy ? 'warning-text' : ''}`}>{service.latency}</span>
-                  </div>
-                  <div className="mini-metric">
-                    <span className="lbl">Uptime</span>
-                    <span className="val">{service.uptime}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+
+        <div className="stat-card glass-card">
+          <div className="stat-main-content">
+            <div className="stat-icon-wrapper cyan">
+              <Activity size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">CPU Usage</span>
+              <div className="stat-value">61%</div>
+            </div>
+          </div>
+          <div className="stat-subtext text-green">
+            <TrendingDown size={12} style={{marginRight: 4, display: 'inline-block', verticalAlign: 'middle'}}/>
+            -12%
+          </div>
+        </div>
+
+        <div className="stat-card glass-card">
+          <div className="stat-main-content">
+            <div className="stat-icon-wrapper green">
+              <Database size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Memory Usage</span>
+              <div className="stat-value">65%</div>
+            </div>
+          </div>
+          <div className="stat-subtext text-green">
+            <TrendingDown size={12} style={{marginRight: 4, display: 'inline-block', verticalAlign: 'middle'}}/>
+            -8%
+          </div>
+        </div>
+
+        <div className="stat-card glass-card">
+          <div className="stat-main-content">
+            <div className="stat-icon-wrapper purple">
+              <Globe size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Network I/O</span>
+              <div className="stat-value">125 MB/s</div>
+            </div>
+          </div>
+          <div className="stat-subtext text-red">
+            <TrendingUp size={12} style={{marginRight: 4, display: 'inline-block', verticalAlign: 'middle'}}/>
+            +18%
+          </div>
         </div>
       </div>
 

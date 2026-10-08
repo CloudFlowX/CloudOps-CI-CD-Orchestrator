@@ -131,6 +131,7 @@
 
 .sidebar-nav-icon {
   flex-shrink: 0;
+  overflow: hidden;
   transition: transform 200ms ease;
 }
 
@@ -200,6 +201,7 @@
   font-size: 0.85rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .user-online-dot {
@@ -427,6 +429,7 @@
 .account-icon-wrapper-interactive {
   position: relative;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .account-status-indicator {
@@ -452,6 +455,7 @@
   color: var(--text-muted);
   margin-left: auto;
   flex-shrink: 0;
+  overflow: hidden;
   transition: transform 200ms ease;
 }
 
@@ -466,6 +470,7 @@
   font-size: 0.7rem;
   text-transform: lowercase;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .account-icon-wrapper.aws {
@@ -1110,6 +1115,7 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .legend-name {
@@ -1154,5 +1160,17 @@
     left: 16px;
     right: 16px;
     width: auto;
+  }
+}
+
+@media (max-width: 1024px) {
+  .cloud-provider-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .cloud-provider-grid {
+    grid-template-columns: 1fr !important;
   }
 }

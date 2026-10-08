@@ -25,84 +25,39 @@ import {
   ShieldAlert,
   ShieldCheck,
   ArrowUpDown,
-  CheckCircle2
+  CheckCircle2, Database, ArrowUpRight, Package
 } from 'lucide-react';
 import ApiClient from '../utils/api';
 
-const INITIAL_AUDIT_LOGS = [
-  {
-    id: 1,
-    secretName: 'DATABASE_URL',
-    action: 'UPDATED',
-    user: 'kunal24',
-    environment: 'Production',
-    timestamp: '2 hours ago',
-    details: 'Rotated password credentials for security compliance'
-  },
-  {
-    id: 2,
-    secretName: 'SMTP_PASSWORD',
-    action: 'UPDATED',
-    user: 'kunal24',
-    environment: 'Staging',
-    timestamp: '1 day ago',
-    details: 'Updated SMTP authentication key for Mailgun server'
-  },
-  {
-    id: 3,
-    secretName: 'STRIPE_SECRET_KEY',
-    action: 'CREATED',
-    user: 'kunal24',
-    environment: 'Production',
-    timestamp: '3 days ago',
-    details: 'Added Stripe live webhook signature verification key'
-  },
-  {
-    id: 4,
-    secretName: 'MONGO_URI',
-    action: 'VIEWED',
-    user: 'kunal24',
-    environment: 'Staging',
-    timestamp: '4 days ago',
-    details: 'Revealed secret value during staging migration audit'
-  },
-  {
-    id: 5,
-    secretName: 'JWT_SECRET',
-    action: 'CREATED',
-    user: 'admin',
-    environment: 'Production',
-    timestamp: '5 days ago',
-    details: 'Initial generation of 256-bit token signing key'
-  },
-  {
-    id: 6,
-    secretName: 'SENTRY_DSN',
-    action: 'UPDATED',
-    user: 'kunal24',
-    environment: 'Development',
-    timestamp: '6 days ago',
-    details: 'Re-configured Sentry DSN for new project workspace'
-  },
-  {
-    id: 7,
-    secretName: 'AWS_ACCESS_KEY_ID',
-    action: 'ROTATED',
-    user: 'admin',
-    environment: 'Production',
-    timestamp: '2 weeks ago',
-    details: 'Routine quarterly AWS IAM user credential rotation'
-  }
-];
 
 export default function SecretsPage() {
   const { currentRole } = useRole();
   const [secrets, setSecrets] = useState([]);
-  const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
+  const [auditLogs, setAuditLogs] = useState([]);
 
   React.useEffect(() => {
     fetchSecrets();
+    fetchAuditLogs();
   }, []);
+
+  const fetchAuditLogs = async () => {
+    try {
+      const res = await ApiClient.get('/audit-logs');
+      if (res.success && res.logs) {
+        const mappedLogs = res.logs.map(log => ({
+          id: log._id,
+          secretName: log.action.split(' ').pop() || 'System', // Just a fallback, not ideal but secrets page used secretName
+          action: log.action,
+          user: log.user?.fullName || 'System',
+          time: new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(log.createdAt).toLocaleDateString()
+        })).slice(0, 5); // Only get the 5 most recent for the sidebar
+        setAuditLogs(mappedLogs);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchSecrets = async () => {
     try {
@@ -450,11 +405,81 @@ export default function SecretsPage() {
         </div>
       </header>
 
+      {/* Stats Grid (Top) */}
+      <div className="secrets-stats-grid">
+        <div className="secret-stat-card">
+          <div className="secret-stat-left">
+            <div className="secret-stat-icon cyan">
+              <Shield size={24} />
+            </div>
+            <div className="secret-stat-info">
+              <span className="secret-stat-label">Total Secrets</span>
+              <span className="secret-stat-value">12</span>
+              <span className="secret-stat-subtext text-green">
+                <ArrowUpRight size={12} style={{marginRight: 2, verticalAlign: 'middle'}}/>
+                +2 this week
+              </span>
+            </div>
+          </div>
+          <div className="secret-stat-right-icon">
+            <Database size={40} strokeWidth={1} />
+          </div>
+        </div>
+
+        <div className="secret-stat-card">
+          <div className="secret-stat-left">
+            <div className="secret-stat-icon purple">
+              <Shield size={24} />
+            </div>
+            <div className="secret-stat-info">
+              <span className="secret-stat-label">Environments</span>
+              <span className="secret-stat-value">4</span>
+              <span className="secret-stat-subtext">Production, Staging, Dev, Test</span>
+            </div>
+          </div>
+          <div className="secret-stat-right-icon">
+            <Package size={40} strokeWidth={1} />
+          </div>
+        </div>
+
+        <div className="secret-stat-card">
+          <div className="secret-stat-left">
+            <div className="secret-stat-icon blue">
+              <EyeOff size={24} />
+            </div>
+            <div className="secret-stat-info">
+              <span className="secret-stat-label">Rotated (30d)</span>
+              <span className="secret-stat-value">3</span>
+              <span className="secret-stat-subtext">Last rotation: 2 days ago</span>
+            </div>
+          </div>
+          <div className="secret-stat-right-icon">
+            <RefreshCw size={40} strokeWidth={1} />
+          </div>
+        </div>
+
+        <div className="secret-stat-card">
+          <div className="secret-stat-left">
+            <div className="secret-stat-icon red">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="secret-stat-info">
+              <span className="secret-stat-label">Expiring Soon</span>
+              <span className="secret-stat-value">1</span>
+              <span className="secret-stat-subtext text-red">Expires in 6 days</span>
+            </div>
+          </div>
+          <div className="secret-stat-right-icon">
+            <Clock size={40} strokeWidth={1} />
+          </div>
+        </div>
+      </div>
+
       {/* Control Toolbar: Environment Tabs & Search */}
       <div className="secrets-toolbar">
         {/* Environment Tabs */}
         <div className="secrets-tabs">
-          {['All', 'Production', 'Staging', 'Development'].map((env) => (
+          {['All', 'Production', 'Staging', 'Development', 'Test'].map((env) => (
             <button
               key={env}
               className={`secrets-tab ${activeTab === env ? 'active' : ''}`}

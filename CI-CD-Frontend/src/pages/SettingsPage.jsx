@@ -202,7 +202,37 @@ export default function SettingsPage() {
 
   React.useEffect(() => {
     fetchProfile();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await ApiClient.get('/settings');
+      if (res.success && res.settings) {
+        setGeneral({
+          orgName: res.settings.orgName,
+          defaultBranch: res.settings.defaultBranch,
+          buildTimeout: res.settings.buildTimeout,
+          autoDeploy: res.settings.autoDeploy,
+          parallelBuilds: res.settings.parallelBuilds,
+          retentionDays: res.settings.retentionDays
+        });
+        setNotifications({
+          emailNotifications: res.settings.emailNotifications,
+          primaryEmail: res.settings.primaryEmail,
+          digestFrequency: res.settings.digestFrequency,
+          slackNotifications: res.settings.slackNotifications,
+          slackWebhookUrl: res.settings.slackWebhookUrl,
+          teamsNotifications: res.settings.teamsNotifications,
+          teamsWebhookUrl: res.settings.teamsWebhookUrl,
+          webhookAlerts: res.settings.webhookAlerts,
+          genericWebhookUrl: res.settings.genericWebhookUrl
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -264,23 +294,33 @@ export default function SettingsPage() {
   };
 
   // General Handlers
-  const handleSaveGeneral = (e) => {
+  const handleSaveGeneral = async (e) => {
     if (e) e.preventDefault();
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
+    try {
+      await ApiClient.put('/settings', general);
       triggerToast('General settings saved successfully!');
-    }, 600);
+    } catch (err) {
+      console.error(err);
+      triggerToast('Failed to save general settings', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Notifications Handlers
-  const handleSaveNotifications = (e) => {
+  const handleSaveNotifications = async (e) => {
     if (e) e.preventDefault();
     setIsSaving(true);
-    setTimeout(() => {
+    try {
+      await ApiClient.put('/settings', notifications);
+      triggerToast('Notification settings saved successfully!');
+    } catch (err) {
+      console.error(err);
+      triggerToast('Failed to save notification settings', 'error');
+    } finally {
       setIsSaving(false);
-      triggerToast('Notification preferences updated!');
-    }, 600);
+    }
   };
 
   const handleTestSlackWebhook = () => {

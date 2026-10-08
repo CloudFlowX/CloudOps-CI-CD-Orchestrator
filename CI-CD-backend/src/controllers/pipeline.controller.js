@@ -407,6 +407,11 @@ export const executePipelineJob = async (pipelineId) => {
              await runSSH(`git clone ${repository.githubUrl} ${repoName}`);
            }
 
+           // 3.5 Ensure Node.js is installed
+           onLog(`[DEPLOY] Checking if Node.js & NPM are installed on target...`);
+           const installNodeCmd = `if ! command -v npm &> /dev/null; then curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - && sudo apt-get install -y nodejs; fi`;
+           await runSSH(installNodeCmd);
+
            // 4. Check App Type & Install Dependencies
            onLog(`[DEPLOY] Checking repository type...`);
            const checkPkgCmd = `[ -f "${targetDir}/package.json" ] && echo "node" || echo "static"`;
@@ -419,13 +424,13 @@ export const executePipelineJob = async (pipelineId) => {
              
              // 5. Start Application
              onLog(`[DEPLOY] Starting Node.js application on port ${pipeline.appPort || 5003}...`);
-             const startCmd = `export PORT=${pipeline.appPort || 5003} && (pm2 restart ${repoName} || pm2 start npm --name "${repoName}" -- start || nohup npm start > app.log 2>&1 &)`;
+             const startCmd = `export PORT=${pipeline.appPort || 5003} && (npx -y pm2 restart ${repoName} || npx -y pm2 start npm --name "${repoName}" -- start || nohup npm start > app.log 2>&1 &)`;
              await runSSH(`cd ${targetDir} && ${startCmd}`);
            } else {
              onLog(`[DEPLOY] Static website detected (No package.json).`);
              onLog(`[DEPLOY] Starting static web server on port ${pipeline.appPort || 5003}...`);
-             // Use npx serve for static sites in the background
-             const startCmd = `(pm2 restart ${repoName}-static || pm2 start serve --name "${repoName}-static" -- -s . -p ${pipeline.appPort || 5003} || nohup serve -s . -p ${pipeline.appPort || 5003} > app.log 2>&1 &)`;
+             // Use npx serve or pm2 serve for static sites in the background
+             const startCmd = `(npx -y pm2 restart ${repoName}-static || npx -y pm2 serve . ${pipeline.appPort || 5003} --spa --name "${repoName}-static" || nohup npx -y serve -s . -p ${pipeline.appPort || 5003} > app.log 2>&1 &)`;
              await runSSH(`cd ${targetDir} && ${startCmd}`);
            }
 

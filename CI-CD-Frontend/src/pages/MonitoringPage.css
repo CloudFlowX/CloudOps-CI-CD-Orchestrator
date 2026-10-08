@@ -4,15 +4,33 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 24px;
-  width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
   color: var(--text-primary);
-  background-color: var(--bg-primary);
+  
+  background-color: var(--bg-primary, #0a0e1a);
+  background-image: url('/monitoring.png');
+  background-size: 100% auto;
+  background-position: top center;
+  background-repeat: no-repeat;
+  
+  margin-top: -64px;
+  margin-left: -28px;
+  margin-right: -28px;
+  margin-bottom: -28px;
+  padding: calc(64px + 260px) 28px 28px 28px;
+  box-sizing: border-box;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
   position: relative;
+}
+
+@media (max-width: 768px) {
+  .monitoring-page {
+    padding-top: calc(64px + 120px);
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 /* Toast Notification */
@@ -48,12 +66,14 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .header-badge-row {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .header-titles h1 {
@@ -94,6 +114,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .refresh-btn {
@@ -152,122 +173,81 @@
 }
 
 /* 2. Health Status Bar */
-.health-bar-container {
-  background: rgba(17, 24, 39, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  transition: all 250ms ease;
-}
-
-.health-bar-title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.health-bar-title-row h3 {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.health-summary {
-  font-size: 13px;
-  color: var(--accent-green);
-  font-weight: 500;
-  background: rgba(34, 197, 94, 0.1);
-  padding: 2px 10px;
-  border-radius: 12px;
-}
-
-.health-cards-row {
+.overview-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
 }
 
-.service-health-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px;
+@media (max-width: 1024px) {
+  .overview-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 580px) {
+  .overview-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: all 250ms ease;
-}
-
-.service-health-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
-}
-
-.service-health-card.status-healthy {
-  border-left: 3px solid var(--accent-green);
-}
-
-.service-health-card.status-warning {
-  border-left: 3px solid var(--accent-yellow);
-  background: rgba(234, 179, 8, 0.03);
-}
-
-.health-card-top {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
 }
 
-.service-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.health-card-metrics {
+.stat-main-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  background: rgba(15, 23, 42, 0.6);
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
-.mini-metric {
+.stat-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
-.mini-metric .lbl {
+.stat-label {
   font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.mini-metric .val {
-  font-size: 12px;
   font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-icon-wrapper.blue { background: rgba(59, 130, 246, 0.12); color: var(--accent-blue); }
+.stat-icon-wrapper.green { background: rgba(34, 197, 94, 0.12); color: var(--accent-green); }
+.stat-icon-wrapper.cyan { background: rgba(6, 182, 212, 0.12); color: var(--accent-cyan); }
+.stat-icon-wrapper.purple { background: rgba(168, 85, 247, 0.12); color: var(--accent-purple); }
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
   color: var(--text-primary);
-  font-family: monospace;
+  line-height: 1.1;
 }
 
-.warning-text {
-  color: var(--accent-yellow) !important;
+.stat-subtext {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.error-text {
-  color: var(--accent-red) !important;
-}
+.text-green { color: var(--accent-green); }
+.text-red { color: var(--accent-red); }
 
 /* 3. Metrics Grid (2x2 Chart Cards) */
 .metrics-grid {
@@ -946,5 +926,29 @@
 
   .filter-select-wrapper select {
     width: 100%;
+  }
+}
+
+@media (max-width: 1024px) {
+  .overview-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .overview-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .metrics-grid {
+    grid-template-columns: 1fr !important;
   }
 }

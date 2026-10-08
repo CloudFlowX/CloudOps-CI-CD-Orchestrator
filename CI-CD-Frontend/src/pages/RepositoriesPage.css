@@ -3,9 +3,17 @@
 .repo-page-container {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-primary, #0a0e1a);
+  background-image: url('/repository.png');
+  background-size: 100% auto;
+  background-position: top center;
+  background-repeat: no-repeat;
   color: var(--text-primary, #f1f5f9);
   min-height: 100vh;
-  padding: 2rem;
+  margin-top: -64px;
+  margin-left: -28px;
+  margin-right: -28px;
+  margin-bottom: -28px;
+  padding: calc(64px + 260px) 28px 28px 28px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -147,14 +155,17 @@
 }
 
 .stat-label {
-  font-size: 0.85rem;
-  color: var(--text-secondary, #94a3b8);
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .stat-value {
-  font-size: 1.5rem;
+  font-size: 26px;
   font-weight: 700;
+  line-height: 1.1;
   color: var(--text-primary, #f1f5f9);
 }
 
@@ -959,4 +970,24 @@
 
 .modal-btn.submit-btn:hover {
   background: #16a34a;
+}
+
+@media (max-width: 768px) {
+  .repo-page-container {
+    background-size: max(100%, 800px) auto;
+    margin-left: -16px;
+    margin-right: -16px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .repo-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .repo-grid {
+    grid-template-columns: 1fr !important;
+  }
 }

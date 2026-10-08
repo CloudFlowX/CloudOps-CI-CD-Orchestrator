@@ -14,6 +14,7 @@ import userRoutes from "./routes/user.routes.js";
 import auditLogRoutes from "./routes/auditLog.routes.js";
 import alertRoutes from "./routes/alert.routes.js";
 import alertRuleRoutes from "./routes/alertRule.routes.js";
+import settingRoutes from "./routes/setting.routes.js";
 const app = express();
 
 // ==========================
@@ -67,6 +68,7 @@ app.use("/api/v1/environments", environmentRoutes);
 
 // User & Settings Routes
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/settings", settingRoutes);
 
 // Audit Logs Routes
 app.use("/api/v1/audit-logs", auditLogRoutes);

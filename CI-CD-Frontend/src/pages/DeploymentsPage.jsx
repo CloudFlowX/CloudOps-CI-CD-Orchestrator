@@ -19,7 +19,9 @@ import {
   ShieldCheck, 
   Cpu,
   Activity,
-  Check
+  Check,
+  Play,
+  XCircle
 } from 'lucide-react';
 import ApiClient from '../utils/api';
 import './DeploymentsPage.css';
@@ -379,46 +381,54 @@ export default function DeploymentsPage() {
       {/* Stats Row */}
       <div className="stats-grid">
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Total Deployments</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper icon-blue">
-              <Rocket size={20} />
+              <Rocket size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Total Deployments</span>
+              <div className="stat-value">{totalCount}</div>
             </div>
           </div>
-          <div className="stat-value">{totalCount}</div>
           <div className="stat-subtext">Across all environments</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Active</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper icon-green">
-              <CheckCircle2 size={20} />
+              <Play size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Active</span>
+              <div className="stat-value text-green">{activeCount}</div>
             </div>
           </div>
-          <div className="stat-value text-green">{activeCount}</div>
           <div className="stat-subtext">Healthy and serving traffic</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Rolling Out</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper icon-cyan">
-              <RefreshCw size={20} className="spin-slow" />
+              <RefreshCw size={22} className="spin-slow" />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Rolling Out</span>
+              <div className="stat-value text-blue">{rollingCount}</div>
             </div>
           </div>
-          <div className="stat-value text-blue">{rollingCount}</div>
           <div className="stat-subtext">In progress updates</div>
         </div>
 
         <div className="stat-card glass-card">
-          <div className="stat-card-header">
-            <span className="stat-label">Failed</span>
+          <div className="stat-main-content">
             <div className="stat-icon-wrapper icon-red">
-              <AlertCircle size={20} />
+              <XCircle size={22} />
+            </div>
+            <div className="stat-info">
+              <span className="stat-label">Failed</span>
+              <div className="stat-value text-red">{failedCount}</div>
             </div>
           </div>
-          <div className="stat-value text-red">{failedCount}</div>
           <div className="stat-subtext">Requires immediate attention</div>
         </div>
       </div>

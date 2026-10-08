@@ -6,13 +6,23 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  width: 100%;
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 24px;
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
   position: relative;
+  
+  background-color: var(--bg-primary, #0a0e1a);
+  background-image: url('/pipeline_new.png');
+  background-size: 100% auto;
+  background-position: top center;
+  background-repeat: no-repeat;
+  
+  margin-top: -64px;
+  margin-left: -28px;
+  margin-right: -28px;
+  margin-bottom: -28px;
+  padding: calc(64px + 260px) 28px 28px 28px;
+  box-sizing: border-box;
+  min-height: 100vh;
 }
 
 /* Toast Notifications */
@@ -62,6 +72,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .pipelines-title {
@@ -80,6 +91,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* Common Buttons */
@@ -164,27 +176,34 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
-.stat-header {
+.stat-main-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .stat-label {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .stat-icon-wrapper {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .stat-icon-wrapper.total {
@@ -208,9 +227,9 @@
 }
 
 .stat-value {
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.1;
   color: var(--text-primary);
 }
 
@@ -772,6 +791,8 @@
   flex-direction: column;
   overflow: hidden;
   animation: fadeIn 0.25s ease-out;
+  max-width: calc(100% - 32px);
+  width: 90%;
 }
 
 .pipeline-view-modal {
@@ -1185,5 +1206,29 @@
 
   .form-row {
     flex-direction: column;
+  }
+}
+
+
+@media (max-width: 1024px) {
+  .pipelines-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .pipelines-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .pipelines-page {
+    background-size: max(100%, 800px) auto;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-top: calc(64px + 120px);
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }

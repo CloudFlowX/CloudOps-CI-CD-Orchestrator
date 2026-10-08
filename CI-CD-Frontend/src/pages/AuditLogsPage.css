@@ -236,6 +236,7 @@
   justify-content: center;
   color: var(--accent-blue, #3b82f6);
   box-shadow: 0 0 15px rgba(59, 130, 246, 0.15);
+  flex-wrap: wrap;
 }
 
 .header-icon {
@@ -1117,5 +1118,29 @@
   }
   .page-numbers {
     display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .audit-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .audit-stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .details-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .details-grid {
+    grid-template-columns: 1fr !important;
   }
 }

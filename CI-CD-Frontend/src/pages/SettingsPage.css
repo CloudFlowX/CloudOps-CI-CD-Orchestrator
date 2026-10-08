@@ -47,6 +47,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
 }
 
 .settings-page-header .header-icon-badge {
@@ -59,6 +60,7 @@
   align-items: center;
   justify-content: center;
   color: var(--accent-blue);
+  flex-wrap: wrap;
 }
 
 .settings-page-header .header-icon-spin {
@@ -86,6 +88,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* Button Base Rules */
@@ -307,6 +310,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
 }
 
 .card-header-icon {
@@ -1093,6 +1097,8 @@
   border-radius: var(--radius-lg);
   padding: 24px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  max-width: calc(100% - 32px);
+  width: 90%;
 }
 
 .modal-header {
@@ -1238,5 +1244,65 @@
   .settings-page-header .header-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 1024px) {
+  .form-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .toggles-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .toggles-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .checkboxes-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .checkboxes-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .integrations-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .integrations-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .billing-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .billing-grid {
+    grid-template-columns: 1fr !important;
   }
 }
