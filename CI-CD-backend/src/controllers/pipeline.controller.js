@@ -353,9 +353,10 @@ export const executePipelineJob = async (pipelineId) => {
          // 2. SSH Connection
          const ssh = new NodeSSH();
          const sshKeyPath = process.env.EC2_SSH_KEY_PATH;
+         const rawSshKey = process.env.EC2_SSH_KEY;
 
-         if (!sshKeyPath) {
-           throw new Error("EC2_SSH_KEY_PATH is not defined in backend .env");
+         if (!sshKeyPath && !rawSshKey) {
+           throw new Error("Neither EC2_SSH_KEY_PATH nor EC2_SSH_KEY is defined in backend .env");
          }
 
          const usernamesToTry = [process.env.EC2_USERNAME || 'ubuntu', 'ec2-user'];
@@ -368,7 +369,8 @@ export const executePipelineJob = async (pipelineId) => {
              await ssh.connect({
                host: publicIp,
                username: username,
-               privateKeyPath: sshKeyPath,
+               privateKey: rawSshKey ? rawSshKey : undefined,
+               privateKeyPath: !rawSshKey ? sshKeyPath : undefined,
                readyTimeout: 20000,
              });
              connected = true;
@@ -376,7 +378,7 @@ export const executePipelineJob = async (pipelineId) => {
              onLog(`[DEPLOY] SSH Connection successful with ${username}! 🚀`);
              break; // Stop trying if connected
            } catch (err) {
-             onLog(`[DEPLOY] SSH failed with ${username}. Retrying if possible...`);
+             onLog(`[DEPLOY] SSH failed with ${username}. Reason: ${err.message}`);
            }
          }
 
