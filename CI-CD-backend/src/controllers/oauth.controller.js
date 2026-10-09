@@ -11,7 +11,7 @@ const signToken = (id) => {
 
 export const googleLogin = (req, res) => {
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = `http://localhost:5002/api/v1/auth/google/callback`;
+  const redirectUri = `${process.env.BACKEND_URL || "http://localhost:5002"}/api/v1/auth/google/callback`;
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=profile email&prompt=select_account`;
   res.redirect(url);
 };
@@ -27,7 +27,7 @@ export const googleCallback = async (req, res) => {
   try {
     const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
     const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = `http://localhost:5002/api/v1/auth/google/callback`;
+    const redirectUri = `${process.env.BACKEND_URL || "http://localhost:5002"}/api/v1/auth/google/callback`;
 
     // Exchange code for token
     const tokenRes = await axios.post("https://oauth2.googleapis.com/token", {
@@ -71,7 +71,7 @@ export const googleCallback = async (req, res) => {
 
 export const githubLogin = (req, res) => {
   const GITHUB_CLIENT_ID = process.env.GITHUB_LOGIN_CLIENT_ID;
-  const redirectUri = `http://localhost:5002/api/v1/auth/github/callback`;
+  const redirectUri = `${process.env.BACKEND_URL || "http://localhost:5002"}/api/v1/auth/github/callback`;
   const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${redirectUri}&scope=user:email`;
   res.redirect(url);
 };
