@@ -133,7 +133,7 @@ function getMockRuns() {
 // Generate GitHub OAuth URL
 export const getAuthUrl = (req, res) => {
   const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
-  const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+  const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 
   if (!GITHUB_CLIENT_ID) {
     return res.status(500).json({ success: false, message: "Please configure GITHUB_CLIENT_ID in your backend .env file and RESTART the server." });
