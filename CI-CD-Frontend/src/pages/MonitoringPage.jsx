@@ -148,7 +148,7 @@ export default function MonitoringPage() {
     fetchServices();
     fetchIncidents();
 
-    const socket = io("http://localhost:5002", {
+    const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5002", {
       withCredentials: true,
     });
 
