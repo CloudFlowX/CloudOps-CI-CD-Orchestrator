@@ -11,7 +11,7 @@ const signToken = (id) => {
 
 export const googleLogin = (req, res) => {
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-  const redirectUri = `${process.env.BACKEND_URL || "http://localhost:5002"}/api/v1/auth/google/callback`;
+  const redirectUri = `${(process.env.BACKEND_URL || 'http://localhost:5002').replace(/\/$/, '')}/api/v1/auth/google/callback`;
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=profile email&prompt=select_account`;
   res.redirect(url);
 };
@@ -21,13 +21,13 @@ export const googleCallback = async (req, res) => {
   const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
   if (!code) {
-    return res.redirect(`${FRONTEND_URL}/login?error=Google_Auth_Failed`);
+    return res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/login?error=Google_Auth_Failed`);
   }
 
   try {
     const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
     const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = `${process.env.BACKEND_URL || "http://localhost:5002"}/api/v1/auth/google/callback`;
+    const redirectUri = `${(process.env.BACKEND_URL || 'http://localhost:5002').replace(/\/$/, '')}/api/v1/auth/google/callback`;
 
     // Exchange code for token
     const tokenRes = await axios.post("https://oauth2.googleapis.com/token", {
@@ -62,16 +62,16 @@ export const googleCallback = async (req, res) => {
     }
 
     const jwtToken = signToken(user._id);
-    res.redirect(`${FRONTEND_URL}/oauth/callback?token=${jwtToken}`);
+    res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/oauth/callback?token=${jwtToken}`);
   } catch (error) {
     console.error("Google Auth Error:", error.response?.data || error.message);
-    res.redirect(`${FRONTEND_URL}/login?error=Google_Auth_Failed`);
+    res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/login?error=Google_Auth_Failed`);
   }
 };
 
 export const githubLogin = (req, res) => {
   const GITHUB_CLIENT_ID = process.env.GITHUB_LOGIN_CLIENT_ID;
-  const redirectUri = `${process.env.BACKEND_URL || "http://localhost:5002"}/api/v1/auth/github/callback`;
+  const redirectUri = `${(process.env.BACKEND_URL || 'http://localhost:5002').replace(/\/$/, '')}/api/v1/auth/github/callback`;
   const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${redirectUri}&scope=user:email`;
   res.redirect(url);
 };
@@ -81,7 +81,7 @@ export const githubCallback = async (req, res) => {
   const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
   if (!code) {
-    return res.redirect(`${FRONTEND_URL}/login?error=Github_Auth_Failed`);
+    return res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/login?error=Github_Auth_Failed`);
   }
 
   try {
@@ -113,7 +113,7 @@ export const githubCallback = async (req, res) => {
     const email = primaryEmailObj?.email;
 
     if (!email) {
-      return res.redirect(`${FRONTEND_URL}/login?error=Github_No_Email`);
+      return res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/login?error=Github_No_Email`);
     }
 
     const { login, name, avatar_url } = userRes.data;
@@ -132,9 +132,9 @@ export const githubCallback = async (req, res) => {
     }
 
     const jwtToken = signToken(user._id);
-    res.redirect(`${FRONTEND_URL}/oauth/callback?token=${jwtToken}`);
+    res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/oauth/callback?token=${jwtToken}`);
   } catch (error) {
     console.error("GitHub Auth Error:", error.response?.data || error.message);
-    res.redirect(`${FRONTEND_URL}/login?error=Github_Auth_Failed`);
+    res.redirect(`${FRONTEND_URL.replace(/\/$/, '')}/login?error=Github_Auth_Failed`);
   }
 };
