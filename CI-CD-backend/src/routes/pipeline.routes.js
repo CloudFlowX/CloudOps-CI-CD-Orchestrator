@@ -4,6 +4,7 @@ import {
   createPipeline,
   getAllPipelines,
   getPipelineById,
+  getPipelineLogs,
   updatePipeline,
   deletePipeline,
   triggerPipeline,
@@ -62,6 +63,17 @@ router.get(
   protect,
   authorize("admin", "developer", "viewer"),
   getPipelineById
+);
+
+/* =====================================================
+   Get Pipeline Logs
+===================================================== */
+
+router.get(
+  "/:id/logs",
+  protect,
+  authorize("admin", "developer", "viewer"),
+  getPipelineLogs
 );
 
 /* =====================================================

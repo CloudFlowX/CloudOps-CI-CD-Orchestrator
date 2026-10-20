@@ -78,6 +78,11 @@ const pipelineSchema = new mongoose.Schema(
       default: "",
     },
 
+    logs: {
+      type: [String],
+      default: [],
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

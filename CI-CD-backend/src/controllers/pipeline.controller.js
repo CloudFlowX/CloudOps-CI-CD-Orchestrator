@@ -260,14 +260,40 @@ export const executePipelineJob = async (pipelineId) => {
     const repository = await Repository.findById(pipeline.repository);
     if (!repository) return;
 
+    // Accumulate execution logs and auto-persist to database
+    const executionLogs = Array.isArray(pipeline.logs) && pipeline.logs.length > 0 
+      ? [...pipeline.logs] 
+      : [`[INFO] Initializing pipeline runner for ${repository.name}...`];
+
+    let saveTimeout = null;
+    const persistLogs = async () => {
+      try {
+        await Pipeline.findByIdAndUpdate(pipeline._id, { logs: executionLogs });
+      } catch (err) {
+        logger.warn("Could not auto-save logs:", err.message);
+      }
+    };
+
     // Define log streamer callback
     const onLog = (logMessage) => {
+      const cleanMsg = typeof logMessage === 'string' ? logMessage.trim() : String(logMessage);
+      if (!cleanMsg) return;
+      executionLogs.push(cleanMsg);
+
       try {
         getIO().emit("pipeline_log", {
-          id: pipeline._id,
-          log: logMessage.trim()
+          id: pipeline._id.toString(),
+          log: cleanMsg
         });
       } catch (err) {}
+
+      // Debounce saving logs every 1.5 seconds so DB stays updated in real-time
+      if (!saveTimeout) {
+        saveTimeout = setTimeout(async () => {
+          saveTimeout = null;
+          await persistLogs();
+        }, 1500);
+      }
     };
 
     try {
@@ -502,19 +528,26 @@ export const executePipelineJob = async (pipelineId) => {
            ssh.dispose();
          }
       }
-      // Update Status
+      if (saveTimeout) clearTimeout(saveTimeout);
+      onLog(`[SUCCESS] Pipeline execution finished 🎉`);
+
+      // Update Status & persist full execution logs
       pipeline.status = "success";
+      pipeline.logs = executionLogs;
       await pipeline.save();
 
       try {
-        onLog(`[SUCCESS] Pipeline execution finished 🎉`);
         getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "success" });
       } catch (err) {}
     } catch (error) {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      onLog(`[ERROR] Pipeline execution failed: ${error.message || error}`);
+
       pipeline.status = "failed";
+      pipeline.logs = executionLogs;
       await pipeline.save();
+
       try {
-        onLog(`[ERROR] Pipeline execution failed: ${error.message || error}`);
         getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "failed" });
         
         // Trigger system alert for pipeline failure
@@ -568,8 +601,9 @@ export const triggerPipeline = async (req, res) => {
       });
     }
 
-    // Update status to running
+    // Update status to running and initialize fresh log array
     pipeline.status = "running";
+    pipeline.logs = [`[INFO] Pipeline execution triggered manually...`];
     await pipeline.save();
 
     try {
@@ -1230,6 +1264,26 @@ export const rollbackPipeline = async (req, res) => {
     return res.status(200).json({ success: true, message: `Rollback initiated for version/commit: ${version}`, pipeline });
   } catch (error) {
     logger.error("ROLLBACK ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ======================================
+// Get Pipeline Logs
+// ======================================
+export const getPipelineLogs = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pipeline = await Pipeline.findById(id).select("logs status name");
+    if (!pipeline) {
+      return res.status(404).json({ success: false, message: "Pipeline not found." });
+    }
+    return res.status(200).json({
+      success: true,
+      logs: pipeline.logs || [],
+    });
+  } catch (error) {
+    logger.error("GET PIPELINE LOGS ERROR:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

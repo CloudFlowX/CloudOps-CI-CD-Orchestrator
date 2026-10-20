@@ -58,12 +58,19 @@ export default function PipelinesPage() {
   const [editPipeline, setEditPipeline] = useState(null);
   const [liveLogs, setLiveLogs] = useState([]);
   const [toast, setToast] = useState(null);
+  const selectedPipelineRef = useRef(null);
+  const terminalRef = useRef(null);
 
-  React.useEffect(() => {
-    if (!isViewModalOpen) {
-      setLiveLogs([]);
+  useEffect(() => {
+    selectedPipelineRef.current = selectedPipeline;
+  }, [selectedPipeline]);
+
+  // Auto scroll terminal to bottom when new logs appear
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
-  }, [isViewModalOpen]);
+  }, [liveLogs]);
 
   React.useEffect(() => {
     fetchPipelines();
@@ -106,10 +113,19 @@ export default function PipelinesPage() {
     });
 
     socket.on("pipeline_log", ({ id, log }) => {
-      setLiveLogs(prev => {
-        // Prevent duplicate consecutive lines if possible, or just append
-        return [...prev, log];
-      });
+      // Append if the open modal matches this pipeline
+      const currentSelected = selectedPipelineRef.current;
+      if (currentSelected && (currentSelected.id === id || currentSelected._id === id)) {
+        setLiveLogs(prev => [...prev, log]);
+      }
+      // Also update the pipeline's logs in the main pipelines state
+      setPipelines(prev => prev.map(p => {
+        if (p.id === id) {
+          const updatedLogs = [...(p.logs || []), log];
+          return { ...p, logs: updatedLogs };
+        }
+        return p;
+      }));
     });
 
     return () => {
@@ -134,6 +150,7 @@ export default function PipelinesPage() {
           commitHash: p.repository?.name || 'unknown',
           environment: p.environment || 'production',
           stages: [],
+          logs: p.logs || [],
           dockerfilePath: p.dockerfilePath || './Dockerfile',
           deploymentTarget: p.deploymentTarget || 'docker',
           buildCommand: p.buildCommand || 'npm run build'
@@ -275,10 +292,62 @@ export default function PipelinesPage() {
     showToast(`Cancel pipeline not implemented on backend yet.`, 'warning');
   };
 
-  const handleOpenViewModal = (pipeline) => {
+  const handleOpenViewModal = async (pipeline) => {
     setSelectedPipeline(pipeline);
     setIsViewModalOpen(true);
-    setLiveLogs([]);
+
+    // 1. If logs are already present in state, display them immediately
+    if (pipeline.logs && pipeline.logs.length > 0) {
+      setLiveLogs(pipeline.logs);
+    } else {
+      setLiveLogs(['[INFO] Fetching execution logs...']);
+    }
+
+    // 2. Fetch fresh logs from backend API
+    try {
+      const res = await ApiClient.get(`/pipelines/${pipeline.id}/logs`);
+      if (res.success && Array.isArray(res.logs) && res.logs.length > 0) {
+        setLiveLogs(res.logs);
+        setPipelines(prev => prev.map(p => p.id === pipeline.id ? { ...p, logs: res.logs } : p));
+      } else if (!pipeline.logs || pipeline.logs.length === 0) {
+        setLiveLogs([]);
+      }
+    } catch (err) {
+      console.warn("Could not fetch pipeline logs:", err);
+      if (pipeline.logs && pipeline.logs.length > 0) {
+        setLiveLogs(pipeline.logs);
+      } else {
+        setLiveLogs([]);
+      }
+    }
+  };
+
+  const getPipelineStages = (pipeline) => {
+    if (pipeline?.stages && pipeline.stages.length > 0) {
+      return pipeline.stages;
+    }
+    const status = (pipeline?.status || '').toLowerCase();
+    const isSuccess = status === 'success';
+    const isFailed = status === 'failed';
+    const isRunning = status === 'running';
+
+    return [
+      {
+        name: 'Clone Repository',
+        status: isRunning ? 'running' : (isSuccess || isFailed ? 'success' : 'pending'),
+        duration: isSuccess || isFailed ? '3s' : '-'
+      },
+      {
+        name: 'Build Project',
+        status: isRunning ? 'running' : (isSuccess ? 'success' : (isFailed ? 'failed' : 'pending')),
+        duration: isSuccess ? '15s' : (isFailed ? '6s' : '-')
+      },
+      {
+        name: 'Deploy Target',
+        status: isSuccess ? 'success' : (isFailed ? 'failed' : (isRunning ? 'running' : 'pending')),
+        duration: isSuccess ? '10s' : '-'
+      }
+    ];
   };
 
   const handleCreatePipelineSubmit = async (e) => {
@@ -907,7 +976,7 @@ export default function PipelinesPage() {
               <div className="stages-section">
                 <h4 className="section-title">Execution Stages</h4>
                 <div className="stages-timeline">
-                  {selectedPipeline.stages.map((stage, idx) => (
+                  {getPipelineStages(selectedPipeline).map((stage, idx) => (
                     <div
                       key={idx}
                       className={`stage-card stage-${stage.status}`}
@@ -958,12 +1027,25 @@ export default function PipelinesPage() {
                   </div>
                   <span className="terminal-title">build-log.stdout</span>
                   <div className="terminal-actions">
-                    <button className="terminal-btn" title="Download Log">
+                    <button 
+                      className="terminal-btn" 
+                      title="Download Log"
+                      type="button"
+                      onClick={() => {
+                        if (!liveLogs || liveLogs.length === 0) return;
+                        const blob = new Blob([liveLogs.join('\n')], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${selectedPipeline?.name?.replace(/\s+/g, '-') || 'pipeline'}-build.log`;
+                        a.click();
+                      }}
+                    >
                       <Download size={13} />
                     </button>
                   </div>
                 </div>
-                <div className="terminal-content">
+                <div className="terminal-content" ref={terminalRef}>
                   {liveLogs.length > 0 ? (
                     liveLogs.map((log, idx) => (
                       <p key={idx} className={`log-line ${log.includes('[ERROR]') || log.includes('ERR!') ? 'error' : log.includes('✓') || log.includes('[SUCCESS]') ? 'success' : 'info'}`}>{log}</p>
@@ -985,8 +1067,8 @@ export default function PipelinesPage() {
               <button
                 className="btn btn-primary"
                 onClick={() => {
+                  setLiveLogs([`[INFO] Re-triggering pipeline execution...`]);
                   handleRerun(selectedPipeline);
-                  setIsViewModalOpen(false);
                 }}
               >
                 <RotateCcw size={15} />
