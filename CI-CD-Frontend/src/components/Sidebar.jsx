@@ -257,6 +257,14 @@ export default function Sidebar({ isOpen, onClose }) {
           <h1 className="sidebar-title">CloudOps</h1>
           <p className="sidebar-subtitle">CI/CD Orchestrator</p>
         </div>
+        <button
+          className="sidebar-close-btn"
+          onClick={onClose}
+          aria-label="Close sidebar"
+          type="button"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <div className="sidebar-scroll-content">
@@ -366,7 +374,7 @@ export default function Sidebar({ isOpen, onClose }) {
             )}
 
             {accounts.map(account => (
-              <div key={account.id} className="sidebar-account-item">
+              <div key={account.id} className={`sidebar-account-item ${expandedAccount === account.id ? 'expanded' : ''}`}>
                 <div 
                   className={`account-header ${expandedAccount === account.id ? 'expanded' : ''}`}
                   onClick={() => toggleExpand(account.id)}
