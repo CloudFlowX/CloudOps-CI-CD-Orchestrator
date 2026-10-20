@@ -44,6 +44,24 @@ export default function LogsPage() {
   const logTerminalRef = useRef(null);
 
   useEffect(() => {
+    fetchHistoricalLogs();
+  }, []);
+
+  const fetchHistoricalLogs = async () => {
+    try {
+      setLoading(true);
+      const res = await ApiClient.get('/logs');
+      if (res.success && Array.isArray(res.logs)) {
+        setLogs(res.logs);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch historical logs:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5002", {
       withCredentials: true,
     });
@@ -52,8 +70,8 @@ export default function LogsPage() {
       setLogs((prev) => {
         if (!isLive) return prev;
         const updated = [...prev, newLog];
-        // Keep only last 1000 logs
-        if (updated.length > 1000) return updated.slice(updated.length - 1000);
+        // Keep only last 1500 logs
+        if (updated.length > 1500) return updated.slice(updated.length - 1500);
         return updated;
       });
       setLoading(false);
@@ -224,6 +242,7 @@ export default function LogsPage() {
             >
               <option value="All">All Levels</option>
               <option value="INFO">INFO</option>
+              <option value="SUCCESS">SUCCESS</option>
               <option value="WARN">WARN</option>
               <option value="ERROR">ERROR</option>
               <option value="DEBUG">DEBUG</option>
@@ -340,7 +359,12 @@ export default function LogsPage() {
             className={`terminal-body ${wrapLines ? 'wrap-text' : ''}`}
             ref={logTerminalRef}
           >
-            {filteredLogs.length === 0 ? (
+            {loading ? (
+              <div className="terminal-empty-state">
+                <RefreshCw size={36} className="spin-icon empty-icon" />
+                <p>Loading historical pipeline & system logs...</p>
+              </div>
+            ) : filteredLogs.length === 0 ? (
               <div className="terminal-empty-state">
                 <Terminal size={40} className="empty-icon" />
                 <p>No log records found matching the current filters.</p>

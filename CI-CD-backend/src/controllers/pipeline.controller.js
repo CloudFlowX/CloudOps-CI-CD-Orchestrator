@@ -285,6 +285,24 @@ export const executePipelineJob = async (pipelineId) => {
           id: pipeline._id.toString(),
           log: cleanMsg
         });
+
+        // Also stream live to Centralized Logs Dashboard (/logs)
+        const isErr = cleanMsg.includes('[ERROR]') || cleanMsg.includes('ERR!') || cleanMsg.includes('Failed') || cleanMsg.includes('failed');
+        const isSuccess = cleanMsg.includes('[SUCCESS]') || cleanMsg.includes('successful') || cleanMsg.includes('✓');
+        const isWarn = cleanMsg.includes('[WARN]');
+        const level = isErr ? 'ERROR' : (isSuccess ? 'SUCCESS' : (isWarn ? 'WARN' : 'INFO'));
+
+        getIO().emit("system_logs", {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+          level: level,
+          service: `Pipeline: ${pipeline.name}`,
+          message: cleanMsg,
+          requestId: `req-${pipeline._id.toString().slice(-6)}`,
+          traceId: `trace-${pipeline._id.toString().slice(-6)}`,
+          environment: pipeline.environment || "production",
+          containerId: pipeline.ec2InstanceId || "ec2-instance"
+        });
       } catch (err) {}
 
       // Debounce saving logs every 1.5 seconds so DB stays updated in real-time

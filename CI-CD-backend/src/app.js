@@ -15,6 +15,7 @@ import auditLogRoutes from "./routes/auditLog.routes.js";
 import alertRoutes from "./routes/alert.routes.js";
 import alertRuleRoutes from "./routes/alertRule.routes.js";
 import settingRoutes from "./routes/setting.routes.js";
+import logRoutes from "./routes/log.routes.js";
 const app = express();
 
 // ==========================
@@ -73,6 +74,9 @@ app.use("/api/v1/settings", settingRoutes);
 
 // Audit Logs Routes
 app.use("/api/v1/audit-logs", auditLogRoutes);
+
+// Centralized Logs Routes
+app.use("/api/v1/logs", logRoutes);
 
 // Alerts Routes
 app.use("/api/v1/alerts", alertRoutes);
