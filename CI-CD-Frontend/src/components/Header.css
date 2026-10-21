@@ -324,6 +324,16 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.header-left-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header-mobile-brand {
+  display: none;
+}
+
 /* Mobile menu toggle */
 .header-menu-toggle {
   display: none;
@@ -348,52 +358,81 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
+  .header-container {
+    height: 56px;
+    padding: 0 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(10, 14, 26, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+  }
+
   .header-menu-toggle {
     display: flex;
-    flex-wrap: wrap;
-}
-  .header-container {
-    padding: 0 16px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .header-mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-brand-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-brand-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary, #ffffff);
+    letter-spacing: -0.01em;
+  }
+
+  .header-left {
+    display: none !important;
+  }
+
+  .header-search-wrapper {
+    display: none !important;
+  }
+
+  .header-icon-btn[title="Settings"],
+  .header-icon-btn[aria-label="Settings"] {
+    display: none !important;
+  }
+
+  .header-right {
     gap: 12px;
   }
-  .header-subtitle {
-    display: none;
-  }
-  .header-search-wrapper {
-    width: 180px;
-  }
-  .header-title {
-    font-size: 17px;
-  }
-  .header-dropdown {
-    width: calc(100vw - 32px);
-    right: -8px;
-  }
-}
 
-@media (max-width: 576px) {
-  .header-search-wrapper {
-    display: none;
-  }
-  .header-right {
-    gap: 10px;
-  }
   .header-icon-btn {
     width: 36px;
     height: 36px;
   }
-}
 
-@media (max-width: 1024px) {
-  .sidebar {
-    width: 200px;
+  .header-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #6366f1;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
   }
-}
-@media (max-width: 768px) {
-  .sidebar {
-    width: 60px;
-  }
-  .header {
-    padding: 0 16px;
+
+  .header-dropdown {
+    width: calc(100vw - 32px);
+    right: -8px;
   }
 }

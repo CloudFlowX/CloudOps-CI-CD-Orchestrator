@@ -1045,18 +1045,70 @@
     background-size: max(100%, 800px) auto;
     margin-left: -16px;
     margin-right: -16px;
+    padding-top: calc(56px + 120px);
+  }
+
+  .repo-stats-grid {
+    display: none !important;
+  }
+
+  .repo-header-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .repo-header-text .repo-title {
+    font-size: 20px;
+  }
+
+  .repo-header-text .repo-subtitle {
+    font-size: 13px;
+  }
+
+  .repo-header-section .btn-primary {
+    width: 100% !important;
+    justify-content: center !important;
+    background: #2563eb !important;
+    color: #ffffff !important;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .repo-filter-bar {
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .search-input-wrapper {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filter-controls {
+    display: none;
+  }
+
+  .repo-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+  }
+
+  .repo-card {
+    padding: 16px;
+    border-radius: 12px;
   }
 }
 
 @media (max-width: 1024px) {
   .repo-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-
-@media (max-width: 768px) {
-  .repo-grid {
-    grid-template-columns: 1fr !important;
   }
 }
 

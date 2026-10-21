@@ -1306,6 +1306,189 @@
   }
 }
 
+.pipelines-mobile-list {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .table-responsive {
+    display: none !important;
+  }
+
+  .pipelines-pagination {
+    display: none !important;
+  }
+
+  /* In Screen 4: Hide top 4 stats cards so it goes straight to the tabs & cards */
+  .pipelines-stats-grid {
+    display: none !important;
+  }
+
+  .pipelines-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .pipelines-title {
+    font-size: 20px;
+  }
+
+  .pipelines-subtitle {
+    font-size: 13px;
+  }
+
+  .header-actions {
+    display: none !important;
+  }
+
+  .pipelines-mobile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pipeline-mobile-card {
+    background: rgba(17, 24, 39, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .pipeline-mobile-card:active {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+
+  .pipeline-mobile-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .pipeline-mobile-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .pipeline-mobile-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #cbd5e1;
+    flex-shrink: 0;
+  }
+
+  .pipeline-mobile-details {
+    min-width: 0;
+  }
+
+  .pipeline-mobile-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pipeline-mobile-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .pipeline-mobile-meta .bullet {
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  .pipeline-mobile-meta .mono {
+    font-family: monospace;
+    color: var(--text-secondary);
+  }
+
+  .pipeline-mobile-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .pipeline-mobile-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pipeline-mobile-more-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+  }
+
+  .pipeline-mobile-time {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Filter Tabs in Screen 4 */
+  .pipelines-toolbar-card {
+    padding: 6px 0;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  .pipelines-tabs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    width: 100%;
+    padding-bottom: 4px;
+  }
+
+  .tab-item {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .tab-item.active {
+    background: #2563eb !important;
+    color: #ffffff !important;
+    border-color: #2563eb !important;
+    font-weight: 600;
+  }
+
+  .pipelines-filter-controls {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .pipelines-page {
     padding: 16px;

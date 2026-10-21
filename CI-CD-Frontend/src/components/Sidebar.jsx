@@ -28,10 +28,12 @@ import {
   WifiOff,
   Shield,
   User,
-  Eye
+  Eye,
+  LogOut
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 // Missing cloud1.png import removed
 import ApiClient from '../utils/api';
 import './Sidebar.css';
@@ -82,6 +84,7 @@ const AzureIcon = ({ className = "w-5 h-5", color = "currentColor" }) => (
 
 export default function Sidebar({ isOpen, onClose }) {
   const { currentRole, setCurrentRole } = useRole();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState([]);
   const [usageStats, setUsageStats] = useState({
@@ -303,18 +306,18 @@ export default function Sidebar({ isOpen, onClose }) {
           </ul>
         </nav>
 
-        {/* User Profile with Role Switcher */}
+        {/* User Profile with Role Switcher & Sign Out (Screen 2) */}
         <div className="sidebar-user-section">
           <div 
             className="sidebar-user-profile interactive-profile" 
             onClick={() => setShowRoleDropdown(!showRoleDropdown)}
           >
             <div className="sidebar-user-avatar">
-              <span>KK</span>
+              <span>{user?.fullName ? (user.fullName.trim().split(/\s+/).length > 1 ? (user.fullName.trim().split(/\s+/)[0][0] + user.fullName.trim().split(/\s+/)[1][0]).toUpperCase() : user.fullName.substring(0, 2).toUpperCase()) : 'KU'}</span>
               <span className="user-online-dot"></span>
             </div>
             <div className="sidebar-user-info">
-              <span className="sidebar-user-name">Kunal Kumar</span>
+              <span className="sidebar-user-name">{user?.fullName || 'Kunal Kumar'}</span>
               <span className={`sidebar-user-role-badge ${currentRole.toLowerCase()}`}>
                 {currentRole} <ChevronDown size={10} style={{ marginLeft: 2 }} />
               </span>
@@ -344,6 +347,18 @@ export default function Sidebar({ isOpen, onClose }) {
               </button>
             </div>
           )}
+
+          <button 
+            type="button"
+            className="sidebar-mobile-signout"
+            onClick={() => {
+              if (onClose) onClose();
+              logout();
+            }}
+          >
+            <LogOut size={15} />
+            <span>Sign out</span>
+          </button>
         </div>
 
         {/* Cloud Accounts Section */}

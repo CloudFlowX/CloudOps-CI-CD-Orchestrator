@@ -1030,27 +1030,73 @@
 }
 
 @media (max-width: 768px) {
+  .deployments-container {
+    padding-top: calc(56px + 120px);
+  }
+
+  .stats-grid {
+    display: none !important;
+  }
+
   .deployments-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .header-title {
+    font-size: 20px;
+  }
+
+  .header-subtitle {
+    font-size: 13px;
+  }
+
+  .deployments-header-actions {
+    display: none !important;
   }
 
   .controls-row {
     flex-direction: column;
     align-items: stretch;
+    background: transparent;
+    border: none;
+    padding: 0;
+    gap: 10px;
+  }
+
+  .environment-tabs {
+    display: none;
   }
 
   .filter-controls {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    justify-content: flex-end;
+    width: 100%;
   }
 
-  .search-input {
-    width: 100%;
+  .search-box {
+    display: none;
+  }
+
+  .status-dropdown-wrapper {
+    width: auto;
   }
 
   .status-dropdown {
-    width: 100%;
+    width: auto;
+    font-size: 12px;
+    padding: 6px 12px 6px 28px;
+    background: rgba(17, 24, 39, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .deployment-card {
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(17, 24, 39, 0.7);
   }
 }
 

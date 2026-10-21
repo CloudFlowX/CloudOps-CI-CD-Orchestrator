@@ -75,15 +75,29 @@ const Header = ({ title = 'Dashboard', subtitle = 'Overview of your CI/CD pipeli
 
   return (
     <header className="header-container">
-      {onMenuToggle && (
-        <button className="header-menu-toggle" onClick={onMenuToggle} aria-label="Toggle menu">
-          <Menu size={22} />
-        </button>
-      )}
-      {/* Left side: Page Title & Subtitle */}
-      <div className="header-left">
-        <h1 className="header-title">{title}</h1>
-        <p className="header-subtitle">{subtitle}</p>
+      <div className="header-left-section">
+        {onMenuToggle && (
+          <button className="header-menu-toggle" onClick={onMenuToggle} aria-label="Toggle menu">
+            <Menu size={20} />
+          </button>
+        )}
+
+        {/* Mobile Brand Logo & Title (shown on mobile <= 768px) */}
+        <div className="header-mobile-brand">
+          <div className="mobile-brand-icon">
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22">
+              <path d="M30 18.3333C30 13.731 26.269 10 21.6667 10C18.4239 10 15.6146 11.854 14.1506 14.5422C13.4357 14.1866 12.5855 14 11.6667 14C8.90524 14 6.66667 16.2386 6.66667 19C6.66667 19.349 6.70244 19.6896 6.77028 20.0182C4.05342 20.6725 2 23.1378 2 26.0606C2 29.3409 4.65909 32 7.93939 32H28.6667C33.269 32 37 28.269 37 23.6667C37 19.5398 33.9922 16.1158 30 15.4208V18.3333Z" stroke="#4F8AFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M16 22H24M16 22L19 19M16 22L19 25M24 22L21 19M24 22L21 25" stroke="#A855F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <span className="mobile-brand-text">CloudOps</span>
+        </div>
+
+        {/* Desktop Title & Subtitle (hidden on mobile <= 768px) */}
+        <div className="header-left">
+          <h1 className="header-title">{title}</h1>
+          <p className="header-subtitle">{subtitle}</p>
+        </div>
       </div>
 
       {/* Right side: Search, Settings, Notifications, User Avatar */}

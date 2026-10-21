@@ -2,6 +2,42 @@
   animation: fadeIn 0.4s ease forwards;
 }
 
+.dashboard-header-section {
+  margin-bottom: 16px;
+}
+
+.dashboard-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.dashboard-subtitle {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.dashboard-hero-banner {
+  width: 100%;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard-hero-img {
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: cover;
+  display: block;
+}
+
 .dashboard-middle-row {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1fr;
@@ -42,5 +78,49 @@
   .dashboard-bottom-row,
   .dashboard-details-row {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Screen 1: Mobile Phone Dashboard Layout */
+@media (max-width: 768px) {
+  .dashboard-header-section {
+    margin-bottom: 12px;
+  }
+
+  .dashboard-title {
+    font-size: 20px;
+  }
+
+  .dashboard-subtitle {
+    font-size: 12px;
+  }
+
+  .dashboard-hero-banner {
+    margin-bottom: 16px;
+    border-radius: 12px;
+  }
+
+  .dashboard-hero-img {
+    max-height: 150px;
+  }
+
+  .dashboard-middle-row {
+    display: flex;
+    flex-direction: column;
+    margin-top: 16px;
+    margin-bottom: 16px;
+  }
+
+  /* In Screen 1: Keep only Recent Pipelines, hide excessive widgets */
+  .dashboard-middle-row > :not(.recent-pipelines-card),
+  .dashboard-bottom-row,
+  .dashboard-details-row,
+  .dashboard-repos-row {
+    display: none !important;
+  }
+
+  .recent-pipelines-card {
+    width: 100% !important;
+    margin-top: 4px;
   }
 }

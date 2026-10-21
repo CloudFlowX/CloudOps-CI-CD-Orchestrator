@@ -1216,14 +1216,18 @@
   flex-shrink: 0;
 }
 
-/* Mobile Sidebar Responsive */
+/* Mobile Sidebar Responsive (Screen 2) */
 .sidebar-backdrop {
+  display: none;
+}
+
+.sidebar-mobile-signout {
   display: none;
 }
 
 @media (max-width: 768px) {
   .sidebar-container {
-    width: 285px;
+    width: 290px;
     max-width: calc(100vw - 44px);
     height: 100vh;
     height: 100dvh;
@@ -1231,34 +1235,91 @@
     transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: none;
     z-index: 1000;
+    background: #0d121f;
+    border-right: 1px solid var(--border);
   }
 
   .sidebar-container.sidebar-open {
     transform: translateX(0);
-    box-shadow: 10px 0 35px rgba(0, 0, 0, 0.75);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.85);
+  }
+
+  .sidebar-brand {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .sidebar-close-btn {
     display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-left: auto;
   }
 
   .sidebar-scroll-content {
-    padding: 14px 12px;
+    padding: 16px 12px;
     padding-bottom: max(40px, env(safe-area-inset-bottom, 28px));
   }
 
   .sidebar-nav-button {
-    padding: 10px 12px;
-    font-size: 0.9rem;
+    padding: 10px 14px;
+    font-size: 14px;
+    border-radius: 8px;
+    gap: 12px;
+  }
+
+  .sidebar-nav-button.active {
+    background: #2563eb !important;
+    color: #ffffff !important;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  }
+
+  .sidebar-mobile-signout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    margin-top: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #94a3b8;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sidebar-mobile-signout:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  /* Hide bulky desktop cloud accounts & quota chart in mobile drawer */
+  .sidebar-section,
+  .sidebar-quota-section {
+    display: none !important;
   }
 
   .sidebar-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     z-index: 999;
     animation: fadeIn 0.2s ease;
   }
