@@ -400,9 +400,14 @@ export const executePipelineJob = async (pipelineId) => {
          const sshKeyPath = process.env.EC2_SSH_KEY_PATH;
          let rawSshKey = process.env.EC2_SSH_KEY;
 
-         // Normalize raw SSH key string (handle literal \n or escaped line breaks from env vars)
+         // Normalize raw SSH key string (handle quotes, \r\n, \n, escapes)
          if (rawSshKey) {
-           rawSshKey = rawSshKey.replace(/\\n/g, '\n').trim();
+           rawSshKey = rawSshKey.trim();
+           if ((rawSshKey.startsWith('"') && rawSshKey.endsWith('"')) ||
+               (rawSshKey.startsWith("'") && rawSshKey.endsWith("'"))) {
+             rawSshKey = rawSshKey.slice(1, -1);
+           }
+           rawSshKey = rawSshKey.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').trim();
          }
 
          // Support base64-encoded SSH key as alternative
@@ -438,6 +443,20 @@ export const executePipelineJob = async (pipelineId) => {
                onLog(`[DEPLOY] Found SSH key file at: ${p}`);
                break;
              }
+           }
+
+           // Auto scan /etc/secrets directory if it exists
+           if (!resolvedKeyPath && fs.existsSync('/etc/secrets')) {
+             try {
+               const secretFiles = fs.readdirSync('/etc/secrets');
+               for (const sf of secretFiles) {
+                 if (sf.endsWith('.pem') || sf.endsWith('.key') || sf.includes('id_rsa')) {
+                   resolvedKeyPath = path.join('/etc/secrets', sf);
+                   onLog(`[DEPLOY] Auto-discovered SSH key file in /etc/secrets: ${resolvedKeyPath}`);
+                   break;
+                 }
+               }
+             } catch (e) {}
            }
          }
 
@@ -483,7 +502,11 @@ export const executePipelineJob = async (pipelineId) => {
          }
 
          if (!connected) {
-           throw new Error("All configured SSH authentication methods failed. Please check your .pem file and EC2 OS username.");
+           onLog(`[ERROR] All configured SSH authentication methods failed for ${publicIp}.`);
+           onLog(`[HINT] 1. AWS Key Pair: Verify in AWS EC2 Console that instance "${pipeline.ec2InstanceId || publicIp}" was launched with this exact key.`);
+           onLog(`[HINT] 2. Security Group: Inbound rule for Port 22 (SSH) must allow traffic from 0.0.0.0/0.`);
+           onLog(`[HINT] 3. Render Setup: In Render Dashboard -> Environment, set EC2_SSH_KEY with your exact .pem key text, or upload it under "Secret Files" as cloud.pem.`);
+           throw new Error(`All configured SSH authentication methods failed. Key pair on instance ${publicIp} does not match the provided SSH key.`);
          }
 
          try {

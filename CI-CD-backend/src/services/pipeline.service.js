@@ -98,6 +98,7 @@ export const buildProject = async (
     );
 
     if (!fs.existsSync(packageJsonPath)) {
+      if (onLog) onLog(`[BUILD] package.json not found in repository. Skipping npm install and build.\n`);
       return {
         installLogs: "package.json not found.",
         buildLogs: "Build skipped.",
@@ -122,11 +123,21 @@ export const buildProject = async (
     if (onLog) onLog(`[BUILD] Installing dependencies (npm install)...\n`);
     console.log("📦 Installing dependencies...");
 
-    const installLogs = await runCommand(
-      "npm install",
-      projectPath,
-      onLog
-    );
+    let installLogs = "";
+    try {
+      installLogs = await runCommand(
+        "npm install",
+        projectPath,
+        onLog
+      );
+    } catch (npmErr) {
+      if (onLog) onLog(`[WARN] Standard 'npm install' failed: ${npmErr.message}. Retrying with '--legacy-peer-deps'...\n`);
+      installLogs = await runCommand(
+        "npm install --legacy-peer-deps",
+        projectPath,
+        onLog
+      );
+    }
     if (onLog) onLog(`[BUILD] Dependencies installed ✓\n`);
 
     // ============================

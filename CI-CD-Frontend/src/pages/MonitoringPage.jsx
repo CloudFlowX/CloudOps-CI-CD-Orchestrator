@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import api from '../utils/api';
+import { getSocketUrl } from '../utils/socket';
 import {
   AreaChart,
   LineChart,
@@ -148,7 +149,7 @@ export default function MonitoringPage() {
     fetchServices();
     fetchIncidents();
 
-    const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5002", {
+    const socket = io(getSocketUrl(), {
       withCredentials: true,
     });
 

@@ -25,6 +25,7 @@ import {
   Trash2
 } from 'lucide-react';
 import ApiClient from '../utils/api';
+import { getSocketUrl } from '../utils/socket';
 
 
 
@@ -123,7 +124,7 @@ export default function AlertsPage() {
     fetchAlerts();
     fetchRules();
 
-    const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5002", {
+    const socket = io(getSocketUrl(), {
       withCredentials: true,
     });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import ApiClient from '../utils/api';
+import { getSocketUrl } from '../utils/socket';
 import './LogsPage.css';
 import {
   Search,
@@ -62,7 +63,7 @@ export default function LogsPage() {
   };
 
   useEffect(() => {
-    const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5002", {
+    const socket = io(getSocketUrl(), {
       withCredentials: true,
     });
 

@@ -32,10 +32,14 @@ import {
   Share2,
   Sparkles,
   Trash2,
-  ShieldAlert
+  ShieldAlert,
+  Copy,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
 import ApiClient from '../utils/api';
+import { getSocketUrl } from '../utils/socket';
 
 // Removed INITIAL_PIPELINES mock data
 
@@ -57,6 +61,9 @@ export default function PipelinesPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editPipeline, setEditPipeline] = useState(null);
   const [liveLogs, setLiveLogs] = useState([]);
+  const [isTerminalExpanded, setIsTerminalExpanded] = useState(false);
+  const [copiedLogs, setCopiedLogs] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
   const [toast, setToast] = useState(null);
   const selectedPipelineRef = useRef(null);
   const terminalRef = useRef(null);
@@ -65,12 +72,17 @@ export default function PipelinesPage() {
     selectedPipelineRef.current = selectedPipeline;
   }, [selectedPipeline]);
 
-  // Auto scroll terminal to bottom when new logs appear
+  // Auto scroll terminal to bottom when new logs appear or modal opens
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    if (autoScroll && terminalRef.current) {
+      const scrollTimeout = setTimeout(() => {
+        if (terminalRef.current) {
+          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+        }
+      }, 50);
+      return () => clearTimeout(scrollTimeout);
     }
-  }, [liveLogs]);
+  }, [liveLogs, isViewModalOpen, autoScroll]);
 
   React.useEffect(() => {
     fetchPipelines();
@@ -87,7 +99,7 @@ export default function PipelinesPage() {
 
   // Socket.io integration
   useEffect(() => {
-    const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5002", {
+    const socket = io(getSocketUrl(), {
       withCredentials: true,
     });
 
@@ -328,24 +340,60 @@ export default function PipelinesPage() {
     }
     const status = (pipeline?.status || '').toLowerCase();
     const isSuccess = status === 'success';
-    const isFailed = status === 'failed';
     const isRunning = status === 'running';
+    const isFailed = status === 'failed';
+    const logs = (pipeline?.logs && pipeline.logs.length > 0) ? pipeline.logs : liveLogs;
+    const logsText = Array.isArray(logs) ? logs.join('\n') : String(logs || '');
+
+    // Stage 1: Clone Repository
+    const cloneStarted = logsText.includes('[INFO] Initializing') || logsText.includes('[INFO] Clone') || logsText.includes('[INFO] Repository exists') || isRunning || isSuccess;
+    const clonePassed = logsText.includes('[INFO] Git pull completed') || logsText.includes('[INFO] Clone completed') || logsText.includes('[BUILD]') || logsText.includes('[DEPLOY]') || logsText.includes('[DOCKER]') || isSuccess;
+    const cloneFailed = isFailed && !clonePassed;
+
+    // Stage 2: Build Project
+    const buildStarted = logsText.includes('[BUILD]');
+    const buildPassed = logsText.includes('[BUILD] Build completed') || logsText.includes('[BUILD] Dependencies installed') || logsText.includes('[DEPLOY]') || logsText.includes('[DOCKER]') || isSuccess;
+    const buildFailed = isFailed && buildStarted && !buildPassed;
+    const buildSkipped = !buildStarted && (logsText.includes('[DEPLOY]') || logsText.includes('[DOCKER]') || isSuccess || (isFailed && clonePassed));
+
+    // Stage 3: Deploy Target
+    const deployStarted = logsText.includes('[DEPLOY]') || logsText.includes('[DOCKER]');
+    const deployPassed = logsText.includes('[SUCCESS] Pipeline execution finished') || logsText.includes('[DEPLOY] Deployment successful') || isSuccess;
+    const deployFailed = isFailed && (deployStarted || (!buildFailed && !cloneFailed));
+
+    let cloneStatus = 'pending';
+    if (clonePassed) cloneStatus = 'success';
+    else if (cloneFailed) cloneStatus = 'failed';
+    else if (cloneStarted && isRunning) cloneStatus = 'running';
+
+    let buildStatus = 'pending';
+    if (buildPassed) buildStatus = 'success';
+    else if (buildFailed) buildStatus = 'failed';
+    else if (buildSkipped) buildStatus = 'skipped';
+    else if (buildStarted && isRunning) buildStatus = 'running';
+
+    let deployStatus = 'pending';
+    if (deployPassed) deployStatus = 'success';
+    else if (deployFailed) deployStatus = 'failed';
+    else if (deployStarted && isRunning) deployStatus = 'running';
+
+    const targetLabel = pipeline?.deploymentTarget === 'docker' ? 'Deploy Docker' : 'Deploy Target (EC2)';
 
     return [
       {
         name: 'Clone Repository',
-        status: isRunning ? 'running' : (isSuccess || isFailed ? 'success' : 'pending'),
-        duration: isSuccess || isFailed ? '3s' : '-'
+        status: cloneStatus,
+        duration: cloneStatus === 'success' ? '3s' : (cloneStatus === 'running' ? 'running...' : '-')
       },
       {
         name: 'Build Project',
-        status: isRunning ? 'running' : (isSuccess ? 'success' : (isFailed ? 'failed' : 'pending')),
-        duration: isSuccess ? '15s' : (isFailed ? '6s' : '-')
+        status: buildStatus,
+        duration: buildStatus === 'success' ? '6s' : (buildStatus === 'skipped' ? 'Skipped' : (buildStatus === 'running' ? 'running...' : '-'))
       },
       {
-        name: 'Deploy Target',
-        status: isSuccess ? 'success' : (isFailed ? 'failed' : (isRunning ? 'running' : 'pending')),
-        duration: isSuccess ? '10s' : '-'
+        name: targetLabel,
+        status: deployStatus,
+        duration: deployStatus === 'success' ? '12s' : (deployStatus === 'running' ? 'running...' : '-')
       }
     ];
   };
@@ -1017,16 +1065,36 @@ export default function PipelinesPage() {
                 </div>
               </div>
 
-              {/* Mock Terminal Output */}
-              <div className="terminal-box">
+              {/* Terminal Execution Logs */}
+              <div className={`terminal-box ${isTerminalExpanded ? 'expanded' : ''}`}>
                 <div className="terminal-header">
                   <div className="terminal-dots">
                     <span className="dot dot-red"></span>
                     <span className="dot dot-yellow"></span>
                     <span className="dot dot-green"></span>
                   </div>
-                  <span className="terminal-title">build-log.stdout</span>
+                  <div className="terminal-title-bar">
+                    <Terminal size={13} className="terminal-icon" />
+                    <span className="terminal-title">build-log.stdout</span>
+                    <span className="terminal-count-badge">
+                      {liveLogs.reduce((acc, chunk) => acc + String(chunk).split('\n').length, 0)} lines
+                    </span>
+                  </div>
                   <div className="terminal-actions">
+                    <button
+                      className="terminal-btn"
+                      title={copiedLogs ? "Copied!" : "Copy All Logs"}
+                      type="button"
+                      onClick={() => {
+                        if (!liveLogs || liveLogs.length === 0) return;
+                        navigator.clipboard.writeText(liveLogs.join('\n'));
+                        setCopiedLogs(true);
+                        setTimeout(() => setCopiedLogs(false), 2000);
+                      }}
+                    >
+                      {copiedLogs ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+                      <span className="terminal-btn-text">{copiedLogs ? "Copied" : "Copy"}</span>
+                    </button>
                     <button 
                       className="terminal-btn" 
                       title="Download Log"
@@ -1042,16 +1110,53 @@ export default function PipelinesPage() {
                       }}
                     >
                       <Download size={13} />
+                      <span className="terminal-btn-text">Download</span>
+                    </button>
+                    <button
+                      className={`terminal-btn ${isTerminalExpanded ? 'active' : ''}`}
+                      title={isTerminalExpanded ? "Collapse View" : "Expand View"}
+                      type="button"
+                      onClick={() => setIsTerminalExpanded(prev => !prev)}
+                    >
+                      {isTerminalExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                      <span className="terminal-btn-text">{isTerminalExpanded ? "Collapse" : "Expand"}</span>
                     </button>
                   </div>
                 </div>
-                <div className="terminal-content" ref={terminalRef}>
+                <div className={`terminal-content ${isTerminalExpanded ? 'expanded' : ''}`} ref={terminalRef}>
                   {liveLogs.length > 0 ? (
-                    liveLogs.map((log, idx) => (
-                      <p key={idx} className={`log-line ${log.includes('[ERROR]') || log.includes('ERR!') ? 'error' : log.includes('✓') || log.includes('[SUCCESS]') ? 'success' : 'info'}`}>{log}</p>
-                    ))
+                    (() => {
+                      let lineNumberCounter = 1;
+                      return liveLogs.flatMap((logChunk, chunkIdx) => {
+                        const lines = String(logChunk).split('\n');
+                        return lines.map((line, lineIdx) => {
+                          const currentNum = lineNumberCounter++;
+                          let lineType = 'info';
+                          if (line.includes('[ERROR]') || line.includes('ERR!') || line.includes('failed') || line.includes('Failed') || line.includes('Error:')) {
+                            lineType = 'error';
+                          } else if (line.includes('[SUCCESS]') || line.includes('✓') || line.includes('successful') || line.includes('🎉')) {
+                            lineType = 'success';
+                          } else if (line.includes('[WARN]') || line.includes('warning') || line.includes('[HINT]')) {
+                            lineType = 'warn';
+                          } else if (line.includes('[BUILD]')) {
+                            lineType = 'build';
+                          } else if (line.includes('[DEPLOY]') || line.includes('[EC2]')) {
+                            lineType = 'deploy';
+                          }
+                          return (
+                            <div key={`${chunkIdx}-${lineIdx}`} className={`log-line-wrapper ${lineType}`}>
+                              <span className="log-line-num">{currentNum}</span>
+                              <span className={`log-line ${lineType}`}>{line || ' '}</span>
+                            </div>
+                          );
+                        });
+                      });
+                    })()
                   ) : (
-                    <p className="log-line info">Waiting for logs...</p>
+                    <div className="log-empty-state">
+                      <RefreshCw size={15} className="spin-icon" />
+                      <span>Waiting for logs or initializing pipeline execution...</span>
+                    </div>
                   )}
                 </div>
               </div>
