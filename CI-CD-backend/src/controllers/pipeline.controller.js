@@ -357,6 +357,9 @@ export const executePipelineJob = async (pipelineId) => {
                const instanceInfo = data.Reservations?.[0]?.Instances?.[0];
                if (instanceInfo?.PublicIpAddress) {
                  publicIp = instanceInfo.PublicIpAddress;
+                 if (instanceInfo?.KeyName) {
+                   onLog(`[DEPLOY] EC2 Key Pair registered in AWS: "${instanceInfo.KeyName}"`);
+                 }
                  const portToOpen = pipeline.appPort || 5003;
                  pipeline.deployedUrl = `http://${publicIp}:${portToOpen}`;
                  
@@ -427,6 +430,18 @@ export const executePipelineJob = async (pipelineId) => {
            onLog(`[WARN] SSH key file not found at path: ${sshKeyPath}`);
          }
 
+         // If user mistakenly put a file path in EC2_SSH_KEY environment variable
+         if (rawSshKey && (rawSshKey.startsWith('/') || rawSshKey.startsWith('./') || rawSshKey.endsWith('.pem'))) {
+           if (fs.existsSync(rawSshKey)) {
+             resolvedKeyPath = rawSshKey;
+             rawSshKey = undefined;
+             onLog(`[DEPLOY] EC2_SSH_KEY was set to file path. Using file: ${resolvedKeyPath}`);
+           } else {
+             onLog(`[WARN] EC2_SSH_KEY appears to be a file path ("${rawSshKey}"), but the file does not exist on this server.`);
+             rawSshKey = undefined;
+           }
+         }
+
          // Also check fallback secret paths (e.g. Render Secret Files)
          if (!resolvedKeyPath && !rawSshKey) {
            const commonPaths = [
@@ -460,6 +475,18 @@ export const executePipelineJob = async (pipelineId) => {
            }
          }
 
+         if (rawSshKey) {
+           const hasBegin = rawSshKey.includes('-----BEGIN');
+           const hasEnd = rawSshKey.includes('-----END');
+           if (!hasBegin || !hasEnd) {
+             onLog(`[WARN] EC2_SSH_KEY is set but does not have standard '-----BEGIN ... PRIVATE KEY-----' markers.`);
+           } else {
+             onLog(`[DEPLOY] Using EC2_SSH_KEY from environment variables (${rawSshKey.length} chars, valid PEM markers ✓)`);
+           }
+         } else if (resolvedKeyPath) {
+           onLog(`[DEPLOY] Using SSH key file from: ${resolvedKeyPath}`);
+         }
+
          if (!rawSshKey && !resolvedKeyPath) {
            const errorMsg = sshKeyPath 
              ? `SSH key file not found at path "${sshKeyPath}". On Render/cloud, either set the 'EC2_SSH_KEY' environment variable with the full .pem content, or add a Secret File in Render and set EC2_SSH_KEY_PATH to its path.`
@@ -468,11 +495,18 @@ export const executePipelineJob = async (pipelineId) => {
            throw new Error(errorMsg);
          }
 
-         const usernamesToTry = [process.env.EC2_USERNAME || 'ubuntu', 'ec2-user'];
+         const usernamesToTry = [
+           process.env.EC2_USERNAME,
+           'ubuntu',
+           'ec2-user',
+           'admin',
+           'centos'
+         ].filter(Boolean);
+         const uniqueUsernames = [...new Set(usernamesToTry)];
          let connected = false;
          let sshUsername = '';
 
-         for (const username of usernamesToTry) {
+         for (const username of uniqueUsernames) {
            try {
              onLog(`[DEPLOY] Trying SSH with username: ${username}`);
              const sshConfig = {
