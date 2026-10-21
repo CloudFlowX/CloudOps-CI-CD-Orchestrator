@@ -614,44 +614,112 @@
 /* Card Actions */
 .repo-card-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.2fr;
-  gap: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding-top: 14px;
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.action-btn {
-  background: var(--bg-secondary, #111827);
-  border: 1px solid var(--border, #1e293b);
-  border-radius: 6px;
-  color: var(--text-secondary, #94a3b8);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.5rem 0.65rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  transition: all 200ms ease;
+.repo-action-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 7px 10px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  line-height: 1 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  width: 100% !important;
 }
 
-.action-btn:hover {
-  color: var(--text-primary, #f1f5f9);
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
+.repo-action-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
-.action-btn.btn-disconnect:hover {
-  color: var(--accent-red, #ef4444);
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
+/* 1. View button: Sky Blue */
+.repo-action-btn.repo-btn-view {
+  color: #38bdf8 !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
 }
 
-.action-btn.btn-reconnect:hover {
-  color: var(--accent-green, #22c55e);
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.3);
+.repo-action-btn.repo-btn-view:hover {
+  background: rgba(56, 189, 248, 0.22) !important;
+  border-color: rgba(56, 189, 248, 0.7) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.35) !important;
+}
+
+/* 2. Settings button: Purple / Indigo */
+.repo-action-btn.repo-btn-settings {
+  color: #c084fc !important;
+  border: 1px solid rgba(192, 132, 252, 0.3) !important;
+  background: rgba(192, 132, 252, 0.08) !important;
+}
+
+.repo-action-btn.repo-btn-settings:hover {
+  background: rgba(192, 132, 252, 0.22) !important;
+  border-color: rgba(192, 132, 252, 0.7) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(192, 132, 252, 0.35) !important;
+}
+
+/* 3. Disconnect button: Amber / Gold */
+.repo-action-btn.repo-btn-disconnect {
+  color: #fbbf24 !important;
+  border: 1px solid rgba(251, 191, 36, 0.3) !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+}
+
+.repo-action-btn.repo-btn-disconnect:hover {
+  background: rgba(251, 191, 36, 0.22) !important;
+  border-color: rgba(251, 191, 36, 0.7) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.35) !important;
+}
+
+/* Connect button: Green */
+.repo-action-btn.repo-btn-connect {
+  color: #4ade80 !important;
+  border: 1px solid rgba(74, 222, 128, 0.3) !important;
+  background: rgba(74, 222, 128, 0.08) !important;
+}
+
+.repo-action-btn.repo-btn-connect:hover {
+  background: rgba(74, 222, 128, 0.22) !important;
+  border-color: rgba(74, 222, 128, 0.7) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.35) !important;
+}
+
+/* 4. Delete button: Red / Rose */
+.repo-action-btn.repo-btn-delete {
+  color: #f87171 !important;
+  border: 1px solid rgba(248, 113, 113, 0.3) !important;
+  background: rgba(248, 113, 113, 0.08) !important;
+}
+
+.repo-action-btn.repo-btn-delete:hover {
+  background: rgba(248, 113, 113, 0.22) !important;
+  border-color: rgba(248, 113, 113, 0.7) !important;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.35) !important;
 }
 
 /* Empty Filter State */
@@ -989,5 +1057,12 @@
 @media (max-width: 768px) {
   .repo-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .repo-card-actions {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
   }
 }

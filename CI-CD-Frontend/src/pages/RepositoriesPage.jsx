@@ -600,7 +600,8 @@ export default function RepositoriesPage() {
             {/* Card Actions */}
             <div className="repo-card-actions">
               <button
-                className="action-btn btn-view"
+                className="repo-action-btn repo-btn-view"
+                title="View Repository"
                 onClick={() => showToast(`Opening view for ${repo.name}`)}
               >
                 <Eye size={14} />
@@ -610,7 +611,8 @@ export default function RepositoriesPage() {
               {currentRole !== 'Viewer' && (
                 <>
                   <button
-                    className="action-btn btn-settings"
+                    className="repo-action-btn repo-btn-settings"
+                    title="Repository Settings"
                     onClick={() => showToast(`Opened settings for ${repo.name}`)}
                   >
                     <Settings size={14} />
@@ -618,7 +620,8 @@ export default function RepositoriesPage() {
                   </button>
 
                   <button
-                    className={`action-btn ${repo.status === 'Connected' ? 'btn-disconnect' : 'btn-reconnect'}`}
+                    className={`repo-action-btn ${repo.status === 'Connected' ? 'repo-btn-disconnect' : 'repo-btn-connect'}`}
+                    title={repo.status === 'Connected' ? 'Disconnect Repository' : 'Connect Repository'}
                     onClick={() => handleToggleConnection(repo.id)}
                   >
                     <Unplug size={14} />
@@ -626,9 +629,9 @@ export default function RepositoriesPage() {
                   </button>
 
                   <button
-                    className="action-btn btn-delete"
+                    className="repo-action-btn repo-btn-delete"
+                    title="Delete Repository"
                     onClick={() => handleDeleteRepository(repo.id, repo.name)}
-                    style={{ color: '#ff4d4f', borderColor: 'transparent' }}
                   >
                     <Trash2 size={14} />
                     <span>Delete</span>
