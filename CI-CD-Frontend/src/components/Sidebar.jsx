@@ -34,7 +34,6 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
-// Missing cloud1.png import removed
 import ApiClient from '../utils/api';
 import './Sidebar.css';
 
@@ -53,10 +52,6 @@ const navItems = [
   { id: 'users', label: 'Users', icon: Users, path: '/users' },
   { id: 'audit-logs', label: 'Audit Logs', icon: ClipboardList, path: '/audit-logs' }
 ];
-
-
-
-// We will fetch accounts from API
 
 const providerOptions = [
   { value: 'aws', label: 'Amazon Web Services (AWS)', color: '#f97316' },

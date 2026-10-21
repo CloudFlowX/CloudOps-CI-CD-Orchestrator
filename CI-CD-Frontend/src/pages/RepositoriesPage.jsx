@@ -51,9 +51,6 @@ const BitbucketIcon = ({ className = "w-5 h-5" }) => (
 
 import ApiClient from '../utils/api';
 
-// Initial Mock Repository Data
-// Removed mock data
-
 export default function RepositoriesPage() {
   const { currentRole } = useRole();
   const { user, token } = useAuth();

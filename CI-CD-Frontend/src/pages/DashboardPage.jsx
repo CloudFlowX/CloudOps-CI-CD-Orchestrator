@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GitBranch, ShieldCheck, Radio } from 'lucide-react';
+import ApiClient from '../utils/api';
 import StatsCards from '../components/StatsCards';
 import PipelineRunsChart from '../components/PipelineRunsChart';
 import RecentPipelines from '../components/RecentPipelines';
@@ -13,6 +14,33 @@ import archiImg from '../assets/archi.png';
 import './DashboardPage.css';
 
 export default function DashboardPage() {
+  const [repoStats, setRepoStats] = useState({ total: 4, connected: 4, pending: 0 });
+
+  useEffect(() => {
+    let isMounted = true;
+    ApiClient.get('/repositories')
+      .then((res) => {
+        if (isMounted && res && res.success && Array.isArray(res.repositories)) {
+          const total = res.repositories.length;
+          const connected = res.repositories.filter(
+            (r) => r.status === 'connected' || r.status === 'active' || r.status === 'ready' || !r.status
+          ).length;
+          const pending = res.repositories.filter(
+            (r) => r.status === 'pending' || r.status === 'syncing'
+          ).length;
+          setRepoStats({
+            total: total > 0 ? total : 4,
+            connected: total > 0 ? connected : 4,
+            pending,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <div className="dashboard-page">
       {/* Dashboard Page Header (Screen 1) */}
@@ -33,7 +61,7 @@ export default function DashboardPage() {
             <GitBranch size={16} />
           </div>
           <span className="dash-m-label">Total Repositories</span>
-          <div className="dash-m-value">4</div>
+          <div className="dash-m-value">{repoStats.total}</div>
         </div>
 
         <div className="dash-m-card">
@@ -42,7 +70,7 @@ export default function DashboardPage() {
           </div>
           <span className="dash-m-label">Connected</span>
           <div className="dash-m-val-group">
-            <span className="dash-m-value">4</span>
+            <span className="dash-m-value">{repoStats.connected}</span>
             <span className="dash-m-badge badge-green">Active Sync</span>
           </div>
         </div>
@@ -53,7 +81,7 @@ export default function DashboardPage() {
           </div>
           <span className="dash-m-label">Pending</span>
           <div className="dash-m-val-group">
-            <span className="dash-m-value">0</span>
+            <span className="dash-m-value">{repoStats.pending}</span>
             <span className="dash-m-badge badge-yellow">Requisite</span>
           </div>
         </div>

@@ -5,3 +5,4 @@ coverage/
 logs/
 *.log
 workspace/
+.DS_Store

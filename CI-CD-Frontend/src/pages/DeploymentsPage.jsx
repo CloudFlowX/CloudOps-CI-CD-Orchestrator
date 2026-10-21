@@ -854,7 +854,7 @@ export default function DeploymentsPage() {
               <button className="btn btn-secondary" onClick={() => setScaleModalItem(null)}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleSaveScale}>
+              <button className="btn btn-primary" onClick={handleConfirmScale}>
                 Apply Scale
               </button>
             </div>

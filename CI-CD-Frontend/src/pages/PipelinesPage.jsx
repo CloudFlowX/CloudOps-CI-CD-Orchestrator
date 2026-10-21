@@ -41,8 +41,6 @@ import {
 import ApiClient from '../utils/api';
 import { getSocketUrl } from '../utils/socket';
 
-// Removed INITIAL_PIPELINES mock data
-
 export default function PipelinesPage() {
   const { currentRole } = useRole();
   const navigate = useNavigate();
