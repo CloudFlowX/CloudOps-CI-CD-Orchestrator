@@ -12,14 +12,13 @@
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   transition: all var(--transition-normal);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .header-left {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  flex-wrap: wrap;
 }
 
 .header-title {
@@ -42,7 +41,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 /* Search bar styling */
@@ -51,7 +50,6 @@
   display: flex;
   align-items: center;
   width: 280px;
-  flex-wrap: wrap;
 }
 
 .header-search-icon {

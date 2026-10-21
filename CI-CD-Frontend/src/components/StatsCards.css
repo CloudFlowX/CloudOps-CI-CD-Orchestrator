@@ -274,50 +274,9 @@
   }
 }
 
-/* Screen 1: Mobile Stats Grid */
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .stats-cards-grid {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 8px !important;
-  }
-
-  .stat-card {
-    padding: 12px 10px !important;
-    border-radius: 10px !important;
-    min-width: 0 !important;
-  }
-
-  .stat-card-header {
-    margin-bottom: 6px !important;
-  }
-
-  .stat-card-title {
-    font-size: 10px !important;
-    font-weight: 600 !important;
-    color: var(--text-secondary);
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-  }
-
-  .stat-card-value {
-    font-size: 20px !important;
-    font-weight: 700 !important;
-    line-height: 1.1 !important;
-  }
-
-  .stat-card-trend {
-    font-size: 9px !important;
-    white-space: nowrap !important;
-  }
-
-  .stat-card-sparkline {
-    display: none !important;
-  }
-
-  /* In Screen 1: Exactly 3 KPI cards are shown */
-  .stat-card:nth-child(n+4) {
-    display: none !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
   }
 }

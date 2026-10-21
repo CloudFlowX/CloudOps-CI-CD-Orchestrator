@@ -1,5 +1,7 @@
 .dashboard-page {
   animation: fadeIn 0.4s ease forwards;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-header-section {
@@ -28,6 +30,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  background: #0d121f;
 }
 
 .dashboard-hero-img {
@@ -38,12 +41,31 @@
   display: block;
 }
 
+/* Mobile Stat Cards (Screen 1) */
+.dashboard-mobile-stats {
+  display: none;
+}
+
+/* Desktop Stat Cards */
+.dashboard-desktop-stats {
+  display: block;
+  margin-bottom: 24px;
+}
+
+.dashboard-recent-pipelines-section {
+  margin-bottom: 24px;
+  width: 100%;
+}
+
+.dashboard-desktop-widgets {
+  display: block;
+}
+
 .dashboard-middle-row {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-columns: 1.2fr 1fr;
   gap: 20px;
   margin-bottom: 24px;
-  margin-top: 24px;
 }
 
 .dashboard-bottom-row {
@@ -69,12 +91,11 @@
 
 @media (max-width: 1400px) {
   .dashboard-middle-row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 1200px) {
-  .dashboard-middle-row,
   .dashboard-bottom-row,
   .dashboard-details-row {
     grid-template-columns: 1fr;
@@ -83,6 +104,10 @@
 
 /* Screen 1: Mobile Phone Dashboard Layout */
 @media (max-width: 768px) {
+  .dashboard-page {
+    padding-top: 14px;
+  }
+
   .dashboard-header-section {
     margin-bottom: 12px;
   }
@@ -96,31 +121,118 @@
   }
 
   .dashboard-hero-banner {
-    margin-bottom: 16px;
+    margin-bottom: 14px;
     border-radius: 12px;
   }
 
   .dashboard-hero-img {
-    max-height: 150px;
+    max-height: 140px;
   }
 
-  .dashboard-middle-row {
-    display: flex;
-    flex-direction: column;
-    margin-top: 16px;
-    margin-bottom: 16px;
-  }
-
-  /* In Screen 1: Keep only Recent Pipelines, hide excessive widgets */
-  .dashboard-middle-row > :not(.recent-pipelines-card),
-  .dashboard-bottom-row,
-  .dashboard-details-row,
-  .dashboard-repos-row {
+  /* Switch Stat Cards to clean 3-column mobile layout */
+  .dashboard-desktop-stats {
     display: none !important;
   }
 
-  .recent-pipelines-card {
+  .dashboard-mobile-stats {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 16px !important;
     width: 100% !important;
-    margin-top: 4px;
+    box-sizing: border-box !important;
+  }
+
+  .dash-m-card {
+    background: rgba(17, 24, 39, 0.75);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+    box-sizing: border-box;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .dash-m-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .dash-m-icon.icon-blue {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+  }
+
+  .dash-m-icon.icon-green {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+  }
+
+  .dash-m-icon.icon-yellow {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+  }
+
+  .dash-m-label {
+    font-size: 10px;
+    color: #94a3b8;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+
+  .dash-m-val-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .dash-m-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1;
+  }
+
+  .dash-m-badge {
+    font-size: 8px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .dash-m-badge.badge-green {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+
+  .dash-m-badge.badge-yellow {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+  }
+
+  .dashboard-recent-pipelines-section {
+    margin-bottom: 16px;
+    width: 100%;
+  }
+
+  /* In Screen 1: Hide heavy multi-column desktop widgets on mobile */
+  .dashboard-desktop-widgets {
+    display: none !important;
   }
 }
