@@ -572,43 +572,43 @@ export default function DeploymentsPage() {
                 </div>
 
                 {/* Actions Button Group */}
-                <div className="card-actions">
+                <div className="deploy-card-actions">
                   <button 
-                    className="action-btn btn-view" 
+                    className="deploy-btn deploy-btn-view" 
                     title="View Details"
                     onClick={() => setViewDetailsItem(item)}
                   >
-                    <Maximize2 size={15} />
+                    <Maximize2 size={14} />
                     <span>View</span>
                   </button>
 
                   {currentRole !== 'Viewer' && (
                     <>
                       <button 
-                        className="action-btn btn-rollback" 
+                        className="deploy-btn deploy-btn-rollback" 
                         title="Rollback deployment"
                         onClick={() => handleOpenRollback(item)}
                       >
-                        <RotateCcw size={15} />
+                        <RotateCcw size={14} />
                         <span>Rollback</span>
                       </button>
 
                       <button 
-                        className="action-btn btn-scale" 
+                        className="deploy-btn deploy-btn-scale" 
                         title="Scale replicas"
                         onClick={() => handleOpenScale(item)}
                       >
-                        <Layers size={15} />
+                        <Layers size={14} />
                         <span>Scale</span>
                       </button>
 
                       <button 
-                        className={`action-btn btn-restart ${isRestarting ? 'restarting' : ''}`} 
+                        className={`deploy-btn deploy-btn-restart ${isRestarting ? 'restarting' : ''}`} 
                         title="Restart Service"
                         onClick={() => handleRestart(item.id, item.appName)}
                         disabled={isRestarting}
                       >
-                        <RefreshCw size={15} className={isRestarting ? 'spin' : ''} />
+                        <RefreshCw size={14} className={isRestarting ? 'spin' : ''} />
                         <span>{isRestarting ? 'Restarting...' : 'Restart'}</span>
                       </button>
                     </>
