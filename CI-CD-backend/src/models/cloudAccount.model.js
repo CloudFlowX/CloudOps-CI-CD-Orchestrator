@@ -6,7 +6,7 @@ const cloudAccountSchema = new mongoose.Schema(
     provider: {
       type: String,
       required: true,
-      enum: ["AWS", "GCP", "Azure", "DigitalOcean"],
+      enum: ["AWS", "GCP", "Azure", "DigitalOcean", "Cloudflare"],
       default: "AWS",
     },
     accountName: {
@@ -22,6 +22,16 @@ const cloudAccountSchema = new mongoose.Schema(
     },
     region: {
       type: String, // Required for AWS
+    },
+
+    // ======================================
+    // Cloudflare Specific Fields
+    // ======================================
+    cloudflareAccountId: {
+      type: String,
+    },
+    cloudflareApiToken: {
+      type: String,
     },
     
     // ======================================
@@ -85,6 +95,9 @@ cloudAccountSchema.pre("save", async function () {
   if (this.isModified("azureClientSecret") && this.azureClientSecret) {
     this.azureClientSecret = encrypt(this.azureClientSecret);
   }
+  if (this.isModified("cloudflareApiToken") && this.cloudflareApiToken) {
+    this.cloudflareApiToken = encrypt(this.cloudflareApiToken);
+  }
 });
 
 // Virtual or method could be used, but let's decrypt when finding manually in controllers or using a post-find hook
@@ -94,6 +107,7 @@ cloudAccountSchema.post(["find", "findOne"], function (docs) {
     if (doc.secretAccessKey) doc.secretAccessKey = decrypt(doc.secretAccessKey);
     if (doc.gcpPrivateKey) doc.gcpPrivateKey = decrypt(doc.gcpPrivateKey);
     if (doc.azureClientSecret) doc.azureClientSecret = decrypt(doc.azureClientSecret);
+    if (doc.cloudflareApiToken) doc.cloudflareApiToken = decrypt(doc.cloudflareApiToken);
   };
   
   if (Array.isArray(docs)) {

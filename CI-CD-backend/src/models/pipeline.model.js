@@ -37,8 +37,13 @@ const pipelineSchema = new mongoose.Schema(
 
     deploymentTarget: {
       type: String,
-      enum: ["docker", "kubernetes", "aws", "azure", "aws-s3"],
-      default: "aws-s3",
+      enum: ["docker", "kubernetes", "aws", "azure", "aws-s3", "cloudflare"],
+      default: "cloudflare",
+    },
+
+    cloudflareProjectName: {
+      type: String,
+      default: "",
     },
 
     s3BucketName: {

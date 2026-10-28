@@ -162,13 +162,14 @@ export default function PipelinesPage() {
           stages: [],
           logs: p.logs || [],
           dockerfilePath: p.dockerfilePath || './Dockerfile',
-          deploymentTarget: p.deploymentTarget || 'aws-s3',
+          deploymentTarget: p.deploymentTarget || 'cloudflare',
           buildCommand: p.buildCommand || 'npm run build',
           deployedUrl: p.deployedUrl || '',
           cloudAccount: p.cloudAccount?._id || p.cloudAccount || '',
           ec2InstanceId: p.ec2InstanceId || '',
           appPort: p.appPort || 3000,
           s3BucketName: p.s3BucketName || '',
+          cloudflareProjectName: p.cloudflareProjectName || '',
           cloudFrontUrl: p.cloudFrontUrl || ''
         }));
         setPipelines(mapped);
@@ -211,11 +212,12 @@ export default function PipelinesPage() {
     buildCommand: 'npm run build',
     dockerfilePath: './Dockerfile',
     environment: 'development',
-    deploymentTarget: 'aws-s3',
+    deploymentTarget: 'cloudflare',
     cloudAccount: '',
     ec2InstanceId: '',
     appPort: 3000,
-    s3BucketName: ''
+    s3BucketName: '',
+    cloudflareProjectName: ''
   });
 
   const showToast = (message, type = 'info') => {
@@ -382,9 +384,11 @@ export default function PipelinesPage() {
     else if (deployFailed) deployStatus = 'failed';
     else if (deployStarted && isRunning) deployStatus = 'running';
 
-    const targetLabel = pipeline?.deploymentTarget === 'aws-s3'
-      ? 'Deploy S3 + CDN'
-      : (pipeline?.deploymentTarget === 'docker' ? 'Deploy Docker' : 'Deploy Target (EC2)');
+    const targetLabel = pipeline?.deploymentTarget === 'cloudflare'
+      ? 'Deploy Cloudflare Pages'
+      : (pipeline?.deploymentTarget === 'aws-s3'
+        ? 'Deploy S3 + CDN'
+        : (pipeline?.deploymentTarget === 'docker' ? 'Deploy Docker' : 'Deploy Target (EC2)'));
 
     return [
       {
@@ -421,7 +425,8 @@ export default function PipelinesPage() {
         cloudAccount: newPipeline.cloudAccount,
         ec2InstanceId: newPipeline.deploymentTarget === 'aws' ? newPipeline.ec2InstanceId?.trim() : '',
         appPort: newPipeline.deploymentTarget === 'aws' ? newPipeline.appPort : undefined,
-        s3BucketName: newPipeline.s3BucketName?.trim()
+        s3BucketName: newPipeline.s3BucketName?.trim(),
+        cloudflareProjectName: newPipeline.cloudflareProjectName?.trim()
       };
 
       const res = await ApiClient.post('/pipelines', payload);
@@ -434,11 +439,12 @@ export default function PipelinesPage() {
           buildCommand: 'npm run build',
           dockerfilePath: './Dockerfile',
           environment: 'development',
-          deploymentTarget: 'aws-s3',
+          deploymentTarget: 'cloudflare',
           cloudAccount: '',
           ec2InstanceId: '',
           appPort: 3000,
-          s3BucketName: ''
+          s3BucketName: '',
+          cloudflareProjectName: ''
         });
         showToast(`Pipeline "${res.pipeline.name}" created successfully!`, 'success');
         fetchPipelines();
@@ -465,7 +471,8 @@ export default function PipelinesPage() {
         cloudAccount: editPipeline.cloudAccount,
         ec2InstanceId: editPipeline.deploymentTarget === 'aws' ? editPipeline.ec2InstanceId?.trim() : '',
         appPort: editPipeline.deploymentTarget === 'aws' ? editPipeline.appPort : undefined,
-        s3BucketName: editPipeline.s3BucketName?.trim()
+        s3BucketName: editPipeline.s3BucketName?.trim(),
+        cloudflareProjectName: editPipeline.cloudflareProjectName?.trim()
       };
 
       const res = await ApiClient.put(`/pipelines/${editPipeline.id}`, payload);
@@ -866,6 +873,11 @@ export default function PipelinesPage() {
                             <GitBranch size={12} />
                             {pipeline.branch}
                           </span>
+                          {pipeline.deploymentTarget === 'cloudflare' && (
+                            <span style={{ fontSize: '10px', background: 'rgba(249, 115, 22, 0.15)', color: '#f97316', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(249, 115, 22, 0.3)' }}>
+                              Pages.dev
+                            </span>
+                          )}
                           {pipeline.deploymentTarget === 'aws-s3' && (
                             <span style={{ fontSize: '10px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
                               S3 + CDN
@@ -1390,6 +1402,30 @@ export default function PipelinesPage() {
                 <div className="form-group deployment-type-group">
                   <label className="form-label">Deployment Target</label>
                   <div className="radio-group-modern">
+                    <label className={`radio-card ${newPipeline.deploymentTarget === 'cloudflare' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="deploymentTarget"
+                        value="cloudflare"
+                        checked={newPipeline.deploymentTarget === 'cloudflare'}
+                        onChange={(e) => {
+                          setNewPipeline({ 
+                            ...newPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: '',
+                            ec2InstanceId: ''
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="radio-title">Cloudflare Pages (*.pages.dev)</span>
+                          <span style={{ fontSize: '10px', background: 'rgba(249, 115, 22, 0.2)', color: '#f97316', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Idea 2 • Fastest</span>
+                        </div>
+                        <span className="radio-desc">Instant *.pages.dev URL • Mobile Ready • Zero EC2</span>
+                      </div>
+                    </label>
+
                     <label className={`radio-card ${newPipeline.deploymentTarget === 'aws-s3' ? 'active' : ''}`}>
                       <input
                         type="radio"
@@ -1406,10 +1442,7 @@ export default function PipelinesPage() {
                         }}
                       />
                       <div className="radio-content">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span className="radio-title">AWS S3 + CloudFront</span>
-                          <span style={{ fontSize: '10px', background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Recommended</span>
-                        </div>
+                        <span className="radio-title">AWS S3 + CloudFront</span>
                         <span className="radio-desc">Serverless CDN • Permanent URL • Zero EC2</span>
                       </div>
                     </label>
@@ -1455,6 +1488,26 @@ export default function PipelinesPage() {
                     </label>
                   </div>
                 </div>
+
+                {newPipeline.deploymentTarget === 'cloudflare' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Project Subdomain (*.pages.dev)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. velvora-company (leave empty to auto-generate)"
+                        value={newPipeline.cloudflareProjectName || ''}
+                        onChange={(e) =>
+                          setNewPipeline({ ...newPipeline, cloudflareProjectName: e.target.value })
+                        }
+                      />
+                      <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        🌐 Live URL will be: <strong>https://{newPipeline.cloudflareProjectName || 'your-project'}.pages.dev</strong> (Works on all mobile phones, 24/7).
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {newPipeline.deploymentTarget === 'aws-s3' && (
                   <>
@@ -1641,6 +1694,30 @@ export default function PipelinesPage() {
                 <div className="form-group deployment-type-group">
                   <label className="form-label">Deployment Target</label>
                   <div className="radio-group-modern">
+                    <label className={`radio-card ${editPipeline.deploymentTarget === 'cloudflare' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="editDeploymentTarget"
+                        value="cloudflare"
+                        checked={editPipeline.deploymentTarget === 'cloudflare'}
+                        onChange={(e) => {
+                          setEditPipeline({ 
+                            ...editPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: '',
+                            ec2InstanceId: ''
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="radio-title">Cloudflare Pages (*.pages.dev)</span>
+                          <span style={{ fontSize: '10px', background: 'rgba(249, 115, 22, 0.2)', color: '#f97316', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Idea 2 • Fastest</span>
+                        </div>
+                        <span className="radio-desc">Instant *.pages.dev URL • Mobile Ready • Zero EC2</span>
+                      </div>
+                    </label>
+
                     <label className={`radio-card ${editPipeline.deploymentTarget === 'aws-s3' ? 'active' : ''}`}>
                       <input
                         type="radio"
@@ -1657,10 +1734,7 @@ export default function PipelinesPage() {
                         }}
                       />
                       <div className="radio-content">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span className="radio-title">AWS S3 + CloudFront</span>
-                          <span style={{ fontSize: '10px', background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Recommended</span>
-                        </div>
+                        <span className="radio-title">AWS S3 + CloudFront</span>
                         <span className="radio-desc">Serverless CDN • Permanent URL • Zero EC2</span>
                       </div>
                     </label>
@@ -1706,6 +1780,26 @@ export default function PipelinesPage() {
                     </label>
                   </div>
                 </div>
+
+                {editPipeline.deploymentTarget === 'cloudflare' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">Project Subdomain (*.pages.dev)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. velvora-company (leave empty to auto-generate)"
+                        value={editPipeline.cloudflareProjectName || ''}
+                        onChange={(e) =>
+                          setEditPipeline({ ...editPipeline, cloudflareProjectName: e.target.value })
+                        }
+                      />
+                      <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        🌐 Live URL will be: <strong>https://{editPipeline.cloudflareProjectName || 'your-project'}.pages.dev</strong> (Works on all mobile phones, 24/7).
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {editPipeline.deploymentTarget === 'aws-s3' && (
                   <>

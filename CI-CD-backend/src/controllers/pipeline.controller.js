@@ -4,6 +4,7 @@ import Repository from "../models/repository.model.js";
 import CloudAccount from "../models/cloudAccount.model.js";
 import { EC2Client, DescribeInstancesCommand, AuthorizeSecurityGroupIngressCommand, StartInstancesCommand } from "@aws-sdk/client-ec2";
 import { deployToS3AndCloudFront } from "../services/s3Deploy.service.js";
+import { deployToCloudflarePages } from "../services/cloudflareDeploy.service.js";
 import { NodeSSH } from "node-ssh";
 import mongoose from "mongoose";
 import { getIO } from "../config/socket.js";
@@ -42,6 +43,7 @@ export const createPipeline = async (req, res) => {
       ec2InstanceId,
       appPort,
       s3BucketName,
+      cloudflareProjectName,
     } = req.body;
 
     if (!name || !repository) {
@@ -67,11 +69,12 @@ export const createPipeline = async (req, res) => {
       buildCommand,
       dockerfilePath,
       environment,
-      deploymentTarget: deploymentTarget || "aws-s3",
+      deploymentTarget: deploymentTarget || "cloudflare",
       cloudAccount: cloudAccount || null,
       ec2InstanceId: ec2InstanceId || "",
       appPort: appPort || 3000,
       s3BucketName: s3BucketName || "",
+      cloudflareProjectName: cloudflareProjectName || "",
       createdBy: req.user._id,
     });
 
@@ -165,6 +168,7 @@ export const updatePipeline = async (req, res) => {
       ec2InstanceId,
       appPort,
       s3BucketName,
+      cloudflareProjectName,
       status,
     } = req.body;
 
@@ -190,6 +194,8 @@ export const updatePipeline = async (req, res) => {
     pipeline.ec2InstanceId = ec2InstanceId !== undefined ? ec2InstanceId : pipeline.ec2InstanceId;
     pipeline.appPort = appPort !== undefined ? appPort : pipeline.appPort;
     pipeline.s3BucketName = s3BucketName !== undefined ? s3BucketName : pipeline.s3BucketName;
+    pipeline.cloudflareProjectName =
+      cloudflareProjectName !== undefined ? cloudflareProjectName : pipeline.cloudflareProjectName;
     pipeline.status = status !== undefined ? status : pipeline.status;
 
     await pipeline.save();
@@ -332,7 +338,39 @@ export const executePipelineJob = async (pipelineId) => {
       // Docker Image Build (optional — skips if Docker is not running or if deployment Target is not docker)
       let dockerLogs = "Docker build skipped (Direct EC2 deployment).";
       
-      if (pipeline.deploymentTarget === "aws-s3") {
+      if (pipeline.deploymentTarget === "cloudflare") {
+        onLog(`[DEPLOY] Starting Cloudflare Pages Global Edge Deployment...`);
+
+        let cfToken = process.env.CLOUDFLARE_API_TOKEN;
+        let cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+
+        // Check if user connected a Cloudflare CloudAccount
+        if (pipeline.cloudAccount) {
+          try {
+            const cloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+            if (cloudAccount && cloudAccount.provider === "Cloudflare") {
+              if (cloudAccount.cloudflareApiToken) cfToken = cloudAccount.cloudflareApiToken;
+              if (cloudAccount.cloudflareAccountId) cfAccountId = cloudAccount.cloudflareAccountId;
+              onLog(`[DEPLOY] Using connected Cloudflare Account: "${cloudAccount.accountName}"`);
+            }
+          } catch (accErr) {
+            onLog(`[WARN] Could not retrieve selected CloudAccount: ${accErr.message}`);
+          }
+        }
+
+        const cfResult = await deployToCloudflarePages({
+          apiToken: cfToken,
+          accountId: cfAccountId,
+          projectName: pipeline.cloudflareProjectName || pipeline.name,
+          repoName: repository.name,
+          projectPath,
+          onLog,
+        });
+
+        pipeline.deployedUrl = cfResult.deployedUrl;
+        pipeline.cloudflareProjectName = cfResult.projectName;
+        await pipeline.save();
+      } else if (pipeline.deploymentTarget === "aws-s3") {
         onLog(`[DEPLOY] Starting AWS S3 + CloudFront Serverless Deployment (Zero-EC2)...`);
 
         let s3Credentials = null;
