@@ -341,16 +341,20 @@ export const executePipelineJob = async (pipelineId) => {
       if (pipeline.deploymentTarget === "cloudflare") {
         onLog(`[DEPLOY] Starting Cloudflare Pages Global Edge Deployment...`);
 
-        let cfToken = process.env.CLOUDFLARE_API_TOKEN;
-        let cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+        let cfToken = (process.env.CLOUDFLARE_API_TOKEN || "").trim().replace(/[\r\n\t\s"']/g, "");
+        let cfAccountId = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim().replace(/[\r\n\t\s"']/g, "");
 
         // Check if user connected a Cloudflare CloudAccount
         if (pipeline.cloudAccount) {
           try {
             const cloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
             if (cloudAccount && cloudAccount.provider === "Cloudflare") {
-              if (cloudAccount.cloudflareApiToken) cfToken = cloudAccount.cloudflareApiToken;
-              if (cloudAccount.cloudflareAccountId) cfAccountId = cloudAccount.cloudflareAccountId;
+              if (cloudAccount.cloudflareApiToken) {
+                cfToken = (cloudAccount.cloudflareApiToken || "").trim().replace(/[\r\n\t\s"']/g, "");
+              }
+              if (cloudAccount.cloudflareAccountId) {
+                cfAccountId = (cloudAccount.cloudflareAccountId || "").trim().replace(/[\r\n\t\s"']/g, "");
+              }
               onLog(`[DEPLOY] Using connected Cloudflare Account: "${cloudAccount.accountName}"`);
             }
           } catch (accErr) {

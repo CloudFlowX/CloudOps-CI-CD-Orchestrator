@@ -7,6 +7,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
+// Sanitize Cloudflare credentials in environment to prevent trailing newlines/quotes from dashboard pastes
+if (process.env.CLOUDFLARE_ACCOUNT_ID) {
+  process.env.CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID.trim().replace(/[\r\n\t\s"']/g, "");
+}
+if (process.env.CLOUDFLARE_API_TOKEN) {
+  process.env.CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN.trim().replace(/[\r\n\t\s"']/g, "");
+}
+
 import app from "./app.js";
 import connectDB from "./config/db.js";
 import logger from "./config/logger.js";

@@ -6,6 +6,15 @@ import { detectBuildDirectory } from "./s3Deploy.service.js";
 import logger from "../config/logger.js";
 
 /**
+ * Helper to sanitize Cloudflare credentials (strips whitespace, newlines, tabs, and enclosing quotes)
+ */
+export const sanitizeCloudflareCredential = (val) => {
+  if (!val) return "";
+  const str = typeof val === "string" ? val : String(val);
+  return str.trim().replace(/[\r\n\t\s"']/g, "");
+};
+
+/**
  * Sanitize Cloudflare Pages project name (lowercase, alphanumeric, hyphens, 1-28 chars)
  */
 export const sanitizePagesProjectName = (rawName) => {
@@ -27,9 +36,11 @@ export const sanitizePagesProjectName = (rawName) => {
  * Ensure Cloudflare Pages project exists via Cloudflare REST API
  */
 export const ensureCloudflareProject = async (accountId, apiToken, projectName, onLog) => {
-  const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/pages/projects`;
+  const cleanAccountId = sanitizeCloudflareCredential(accountId);
+  const cleanApiToken = sanitizeCloudflareCredential(apiToken);
+  const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${cleanAccountId}/pages/projects`;
   const headers = {
-    Authorization: `Bearer ${apiToken}`,
+    Authorization: `Bearer ${cleanApiToken}`,
     "Content-Type": "application/json",
   };
 
@@ -81,7 +92,14 @@ export const deployToCloudflarePages = async ({
   projectPath,
   onLog = () => {},
 }) => {
-  if (!apiToken || !accountId) {
+  const cleanToken = sanitizeCloudflareCredential(apiToken || process.env.CLOUDFLARE_API_TOKEN);
+  const cleanAccountId = sanitizeCloudflareCredential(accountId || process.env.CLOUDFLARE_ACCOUNT_ID);
+
+  // Sync to runtime process.env so wrangler or child libraries read sanitized values
+  if (cleanAccountId) process.env.CLOUDFLARE_ACCOUNT_ID = cleanAccountId;
+  if (cleanToken) process.env.CLOUDFLARE_API_TOKEN = cleanToken;
+
+  if (!cleanToken || !cleanAccountId) {
     const errorMsg =
       "Cloudflare API Token (CLOUDFLARE_API_TOKEN) and Account ID (CLOUDFLARE_ACCOUNT_ID) are required for Cloudflare Pages deployment.";
     onLog(`[ERROR] ${errorMsg}`);
@@ -95,7 +113,7 @@ export const deployToCloudflarePages = async ({
   onLog(`[CLOUDFLARE] Initializing Cloudflare Pages deployment for "${projectName}"...`);
 
   // 1. Ensure project exists in Cloudflare
-  const projectUrl = await ensureCloudflareProject(accountId, apiToken, projectName, onLog);
+  const projectUrl = await ensureCloudflareProject(cleanAccountId, cleanToken, projectName, onLog);
 
   // 2. Locate build directory (dist, build, out, public, or root)
   const buildDir = detectBuildDirectory(projectPath, onLog);
@@ -132,36 +150,45 @@ export const deployToCloudflarePages = async ({
 
   const env = {
     ...process.env,
-    CLOUDFLARE_API_TOKEN: apiToken,
-    CLOUDFLARE_ACCOUNT_ID: accountId,
+    CLOUDFLARE_API_TOKEN: cleanToken,
+    CLOUDFLARE_ACCOUNT_ID: cleanAccountId,
     WRANGLER_LOG_PATH: "/tmp/wrangler.log",
+    WRANGLER_SEND_METRICS: "false",
+    WRANGLER_OUTPUT_FILE_DIRECTORY: "/tmp",
     XDG_CONFIG_HOME: "/tmp",
     CI: "true",
   };
 
+  const stripAnsi = (str) =>
+    (str || "").replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+
   return new Promise((resolve, reject) => {
     const child = exec(deployCmd, { env, cwd: projectPath }, (error, stdout, stderr) => {
-      if (stdout) {
-        const lines = stdout.split("\n");
+      const cleanStdout = stripAnsi(stdout);
+      const cleanStderr = stripAnsi(stderr);
+
+      if (cleanStdout) {
+        const lines = cleanStdout.split("\n");
         lines.forEach((line) => {
-          if (line.trim()) onLog(`[CLOUDFLARE] ${line}`);
+          const l = line.trim();
+          if (l) onLog(`[CLOUDFLARE] ${l}`);
         });
       }
 
-      if (stderr && !stderr.includes("wrangler-dist")) {
-        onLog(`[CLOUDFLARE] ${stderr}`);
+      if (cleanStderr && !cleanStderr.includes("wrangler-dist")) {
+        onLog(`[CLOUDFLARE] ${cleanStderr}`);
       }
 
       // Check if deployment was successful
       const isSuccess =
         !error ||
-        stdout.includes("Deployment complete") ||
-        stdout.includes("Success") ||
-        stdout.includes(".pages.dev");
+        cleanStdout.includes("Deployment complete") ||
+        cleanStdout.includes("Success") ||
+        cleanStdout.includes(".pages.dev");
 
       if (isSuccess) {
         // Extract live URL from stdout if present, or use default pages.dev domain
-        const match = stdout.match(/https:\/\/[a-zA-Z0-9-]+\.pages\.dev/);
+        const match = cleanStdout.match(/https:\/\/[a-zA-Z0-9.-]+\.pages\.dev/);
         const liveUrl = match ? match[0] : `https://${projectName}.pages.dev`;
 
         onLog(`[DEPLOY] ====================================================`);
@@ -175,7 +202,7 @@ export const deployToCloudflarePages = async ({
           projectName,
         });
       } else {
-        const errMsg = error?.message || stderr || "Cloudflare Pages deployment failed.";
+        const errMsg = cleanStderr || cleanStdout || error?.message || "Cloudflare Pages deployment failed.";
         onLog(`[ERROR] Cloudflare deployment failed: ${errMsg}`);
         reject(new Error(errMsg));
       }

@@ -86,6 +86,12 @@ const cloudAccountSchema = new mongoose.Schema(
 
 // Middleware to encrypt credentials before saving
 cloudAccountSchema.pre("save", async function () {
+  if (this.cloudflareAccountId) {
+    this.cloudflareAccountId = this.cloudflareAccountId.trim().replace(/[\r\n\t\s"']/g, "");
+  }
+  if (this.cloudflareApiToken) {
+    this.cloudflareApiToken = this.cloudflareApiToken.trim().replace(/[\r\n\t\s"']/g, "");
+  }
   if (this.isModified("secretAccessKey") && this.secretAccessKey) {
     this.secretAccessKey = encrypt(this.secretAccessKey);
   }
