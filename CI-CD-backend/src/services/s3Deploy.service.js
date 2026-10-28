@@ -97,14 +97,29 @@ const getAllFiles = (dirPath, arrayOfFiles = []) => {
 };
 
 /**
- * Sanitize S3 bucket name (lowercase, alphanumeric, dashes, 3-63 chars)
+ * Clean and sanitize custom S3 bucket name (AWS S3 prohibits underscores and uppercase)
+ */
+export const cleanS3BucketName = (rawName) => {
+  if (!rawName) return "";
+  let name = String(rawName)
+    .toLowerCase()
+    .trim()
+    .replace(/_/g, "-") // Convert underscores to hyphens (AWS requirement)
+    .replace(/[^a-z0-9-]/g, "-") // Only lowercase alphanumeric and hyphens
+    .replace(/-+/g, "-") // Collapse multiple consecutive hyphens
+    .replace(/^-|-$/g, ""); // Strip leading and trailing hyphens
+
+  if (name.length > 63) {
+    name = name.substring(0, 63).replace(/-$/, "");
+  }
+  return name;
+};
+
+/**
+ * Sanitize S3 bucket name with prefix and unique suffix
  */
 export const sanitizeBucketName = (rawName, suffix = "") => {
-  let name = (rawName || "app")
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  let name = cleanS3BucketName(rawName) || "app";
 
   if (suffix) {
     name = `${name}-${suffix}`;
@@ -145,13 +160,14 @@ export const deployToS3AndCloudFront = async ({
     credentials,
   });
 
-  // 1. Determine Bucket Name
-  const bucketName =
-    customBucketName ||
-    sanitizeBucketName(
+  // 1. Determine Bucket Name (Sanitize underscores and invalid characters)
+  let bucketName = cleanS3BucketName(customBucketName);
+  if (!bucketName || bucketName.length < 3) {
+    bucketName = sanitizeBucketName(
       repoName,
       Math.random().toString(36).substring(2, 7)
     );
+  }
 
   onLog(`[S3] Initializing deployment to S3 bucket: "${bucketName}" (Region: ${resolvedRegion})...`);
 
@@ -168,7 +184,7 @@ export const deployToS3AndCloudFront = async ({
 
   if (!bucketExists) {
     onLog(`[S3] Creating new S3 bucket: "${bucketName}"...`);
-    const createParams = { Bucket: bucketName };
+    let createParams = { Bucket: bucketName };
     if (resolvedRegion !== "us-east-1") {
       createParams.CreateBucketConfiguration = {
         LocationConstraint: resolvedRegion,
@@ -181,6 +197,15 @@ export const deployToS3AndCloudFront = async ({
     } catch (createErr) {
       if (createErr.name === "BucketAlreadyOwnedByYou") {
         onLog(`[S3] Bucket "${bucketName}" is already owned by your AWS account.`);
+      } else if (createErr.name === "BucketAlreadyExists") {
+        // Name is taken globally across AWS by another account, auto-retry with random suffix
+        const uniqueSuffix = Math.random().toString(36).substring(2, 7);
+        const retryBucket = `${bucketName.substring(0, 56)}-${uniqueSuffix}`;
+        onLog(`[WARN] S3 bucket "${bucketName}" is already taken globally. Retrying with unique name "${retryBucket}"...`);
+        bucketName = retryBucket;
+        createParams.Bucket = bucketName;
+        await s3Client.send(new CreateBucketCommand(createParams));
+        onLog(`[S3] Bucket "${bucketName}" created successfully ✓`);
       } else {
         onLog(`[ERROR] Failed to create S3 bucket "${bucketName}": ${createErr.message}`);
         throw createErr;

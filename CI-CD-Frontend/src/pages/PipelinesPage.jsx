@@ -1538,9 +1538,15 @@ export default function PipelinesPage() {
                         placeholder="e.g. my-app-production (leave empty to auto-generate)"
                         value={newPipeline.s3BucketName || ''}
                         onChange={(e) =>
-                          setNewPipeline({ ...newPipeline, s3BucketName: e.target.value })
+                          setNewPipeline({
+                            ...newPipeline,
+                            s3BucketName: e.target.value.toLowerCase().replace(/_/g, '-').replace(/[^a-z0-9-]/g, '')
+                          })
                         }
                       />
+                      <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        ℹ️ AWS S3 naming rule: Only lowercase letters, numbers, and hyphens (-) allowed. Underscores are automatically converted to hyphens.
+                      </span>
                     </div>
                   </>
                 )}
@@ -1830,9 +1836,15 @@ export default function PipelinesPage() {
                         placeholder="e.g. my-app-production (leave empty to auto-generate)"
                         value={editPipeline.s3BucketName || ''}
                         onChange={(e) =>
-                          setEditPipeline({ ...editPipeline, s3BucketName: e.target.value })
+                          setEditPipeline({
+                            ...editPipeline,
+                            s3BucketName: e.target.value.toLowerCase().replace(/_/g, '-').replace(/[^a-z0-9-]/g, '')
+                          })
                         }
                       />
+                      <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        ℹ️ AWS S3 naming rule: Only lowercase letters, numbers, and hyphens (-) allowed. Underscores are automatically converted to hyphens.
+                      </span>
                     </div>
                   </>
                 )}
