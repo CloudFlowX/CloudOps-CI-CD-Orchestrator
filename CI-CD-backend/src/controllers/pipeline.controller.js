@@ -2,7 +2,8 @@ import fs from "fs";
 import Pipeline from "../models/pipeline.model.js";
 import Repository from "../models/repository.model.js";
 import CloudAccount from "../models/cloudAccount.model.js";
-import { EC2Client, DescribeInstancesCommand, AuthorizeSecurityGroupIngressCommand } from "@aws-sdk/client-ec2";
+import { EC2Client, DescribeInstancesCommand, AuthorizeSecurityGroupIngressCommand, StartInstancesCommand } from "@aws-sdk/client-ec2";
+import { deployToS3AndCloudFront } from "../services/s3Deploy.service.js";
 import { NodeSSH } from "node-ssh";
 import mongoose from "mongoose";
 import { getIO } from "../config/socket.js";
@@ -40,6 +41,7 @@ export const createPipeline = async (req, res) => {
       cloudAccount,
       ec2InstanceId,
       appPort,
+      s3BucketName,
     } = req.body;
 
     if (!name || !repository) {
@@ -65,10 +67,11 @@ export const createPipeline = async (req, res) => {
       buildCommand,
       dockerfilePath,
       environment,
-      deploymentTarget,
+      deploymentTarget: deploymentTarget || "aws-s3",
       cloudAccount: cloudAccount || null,
       ec2InstanceId: ec2InstanceId || "",
       appPort: appPort || 3000,
+      s3BucketName: s3BucketName || "",
       createdBy: req.user._id,
     });
 
@@ -161,6 +164,7 @@ export const updatePipeline = async (req, res) => {
       cloudAccount,
       ec2InstanceId,
       appPort,
+      s3BucketName,
       status,
     } = req.body;
 
@@ -185,6 +189,7 @@ export const updatePipeline = async (req, res) => {
     pipeline.cloudAccount = cloudAccount !== undefined ? cloudAccount : pipeline.cloudAccount;
     pipeline.ec2InstanceId = ec2InstanceId !== undefined ? ec2InstanceId : pipeline.ec2InstanceId;
     pipeline.appPort = appPort !== undefined ? appPort : pipeline.appPort;
+    pipeline.s3BucketName = s3BucketName !== undefined ? s3BucketName : pipeline.s3BucketName;
     pipeline.status = status !== undefined ? status : pipeline.status;
 
     await pipeline.save();
@@ -327,7 +332,58 @@ export const executePipelineJob = async (pipelineId) => {
       // Docker Image Build (optional — skips if Docker is not running or if deployment Target is not docker)
       let dockerLogs = "Docker build skipped (Direct EC2 deployment).";
       
-      if (pipeline.deploymentTarget === "docker") {
+      if (pipeline.deploymentTarget === "aws-s3") {
+        onLog(`[DEPLOY] Starting AWS S3 + CloudFront Serverless Deployment (Zero-EC2)...`);
+
+        let s3Credentials = null;
+        let s3Region = "us-east-1";
+
+        if (pipeline.cloudAccount) {
+          try {
+            const cloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+            if (cloudAccount && cloudAccount.provider === "AWS" && cloudAccount.accessKeyId) {
+              s3Credentials = {
+                accessKeyId: cloudAccount.accessKeyId,
+                secretAccessKey: cloudAccount.secretAccessKey,
+              };
+              s3Region = cloudAccount.region || "us-east-1";
+              onLog(`[DEPLOY] Using connected AWS Cloud Account: "${cloudAccount.accountName}" (${s3Region})`);
+            }
+          } catch (accErr) {
+            onLog(`[WARN] Could not retrieve selected CloudAccount: ${accErr.message}`);
+          }
+        }
+
+        // Fallback to system-level environment credentials if configured
+        if (!s3Credentials && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+          s3Credentials = {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+          };
+          s3Region = process.env.AWS_REGION || "us-east-1";
+          onLog(`[DEPLOY] Using platform managed AWS credentials (${s3Region})`);
+        }
+
+        if (!s3Credentials) {
+          throw new Error("AWS Credentials not found. Please select an AWS Cloud Account in pipeline settings or add AWS_ACCESS_KEY_ID to environment variables.");
+        }
+
+        const s3Result = await deployToS3AndCloudFront({
+          credentials: s3Credentials,
+          region: s3Region,
+          bucketName: pipeline.s3BucketName,
+          repoName: repository.name,
+          projectPath,
+          onLog,
+        });
+
+        pipeline.deployedUrl = s3Result.deployedUrl;
+        pipeline.s3BucketName = s3Result.bucketName;
+        if (s3Result.cloudFrontUrl) {
+          pipeline.cloudFrontUrl = s3Result.cloudFrontUrl;
+        }
+        await pipeline.save();
+      } else if (pipeline.deploymentTarget === "docker") {
         const imageName = `${repository.name.toLowerCase().replace(/\s+/g, "-")}:latest`;
         try {
           dockerLogs = await buildDockerImage(projectPath, imageName, pipeline.dockerfilePath, onLog);
@@ -355,8 +411,31 @@ export const executePipelineJob = async (pipelineId) => {
                });
                const data = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
                const instanceInfo = data.Reservations?.[0]?.Instances?.[0];
-               if (instanceInfo?.PublicIpAddress) {
+               
+               // Smart Auto-Start: If instance is stopped, automatically power it on!
+               if (instanceInfo?.State?.Name === "stopped") {
+                 onLog(`[DEPLOY] EC2 instance "${pipeline.ec2InstanceId}" is currently STOPPED. Attempting automatic start...`);
+                 try {
+                   await ec2Client.send(new StartInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+                   onLog(`[DEPLOY] Start command sent. Waiting for EC2 instance to become 'running' with a public IP...`);
+                   for (let poll = 0; poll < 6; poll++) {
+                     await new Promise((r) => setTimeout(r, 6000));
+                     const pollRes = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+                     const refreshed = pollRes.Reservations?.[0]?.Instances?.[0];
+                     if (refreshed?.PublicIpAddress && refreshed?.State?.Name === "running") {
+                       publicIp = refreshed.PublicIpAddress;
+                       onLog(`[DEPLOY] EC2 instance is now RUNNING! Assigned Public IP: ${publicIp}`);
+                       break;
+                     }
+                   }
+                 } catch (startErr) {
+                   onLog(`[WARN] Could not auto-start EC2 instance: ${startErr.message}`);
+                 }
+               } else if (instanceInfo?.PublicIpAddress) {
                  publicIp = instanceInfo.PublicIpAddress;
+               }
+
+               if (publicIp) {
                  if (instanceInfo?.KeyName) {
                    onLog(`[DEPLOY] EC2 Key Pair registered in AWS: "${instanceInfo.KeyName}"`);
                  }

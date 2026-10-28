@@ -15,7 +15,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-cloudfront": "^3.1159.0",
     "@aws-sdk/client-ec2": "^3.1106.0",
+    "@aws-sdk/client-s3": "^3.1159.0",
     "@aws-sdk/client-sts": "^3.1105.0",
     "@azure/arm-resources": "^8.0.0",
     "@azure/identity": "^4.13.1",
@@ -32,6 +34,7 @@
     "http-proxy-middleware": "^4.2.0",
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
+    "mime-types": "^3.0.2",
     "mongoose": "^9.8.1",
     "morgan": "^1.11.0",
     "node-cron": "^4.6.0",

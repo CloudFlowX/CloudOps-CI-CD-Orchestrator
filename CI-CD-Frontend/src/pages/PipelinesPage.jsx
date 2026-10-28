@@ -162,8 +162,14 @@ export default function PipelinesPage() {
           stages: [],
           logs: p.logs || [],
           dockerfilePath: p.dockerfilePath || './Dockerfile',
-          deploymentTarget: p.deploymentTarget || 'docker',
-          buildCommand: p.buildCommand || 'npm run build'
+          deploymentTarget: p.deploymentTarget || 'aws-s3',
+          buildCommand: p.buildCommand || 'npm run build',
+          deployedUrl: p.deployedUrl || '',
+          cloudAccount: p.cloudAccount?._id || p.cloudAccount || '',
+          ec2InstanceId: p.ec2InstanceId || '',
+          appPort: p.appPort || 3000,
+          s3BucketName: p.s3BucketName || '',
+          cloudFrontUrl: p.cloudFrontUrl || ''
         }));
         setPipelines(mapped);
       }
@@ -205,10 +211,11 @@ export default function PipelinesPage() {
     buildCommand: 'npm run build',
     dockerfilePath: './Dockerfile',
     environment: 'development',
-    deploymentTarget: 'docker',
+    deploymentTarget: 'aws-s3',
     cloudAccount: '',
     ec2InstanceId: '',
-    appPort: 3000
+    appPort: 3000,
+    s3BucketName: ''
   });
 
   const showToast = (message, type = 'info') => {
@@ -375,7 +382,9 @@ export default function PipelinesPage() {
     else if (deployFailed) deployStatus = 'failed';
     else if (deployStarted && isRunning) deployStatus = 'running';
 
-    const targetLabel = pipeline?.deploymentTarget === 'docker' ? 'Deploy Docker' : 'Deploy Target (EC2)';
+    const targetLabel = pipeline?.deploymentTarget === 'aws-s3'
+      ? 'Deploy S3 + CDN'
+      : (pipeline?.deploymentTarget === 'docker' ? 'Deploy Docker' : 'Deploy Target (EC2)');
 
     return [
       {
@@ -410,8 +419,9 @@ export default function PipelinesPage() {
         environment: newPipeline.environment,
         deploymentTarget: newPipeline.deploymentTarget,
         cloudAccount: newPipeline.cloudAccount,
-        ec2InstanceId: newPipeline.ec2InstanceId?.trim(),
-        appPort: newPipeline.appPort
+        ec2InstanceId: newPipeline.deploymentTarget === 'aws' ? newPipeline.ec2InstanceId?.trim() : '',
+        appPort: newPipeline.deploymentTarget === 'aws' ? newPipeline.appPort : undefined,
+        s3BucketName: newPipeline.s3BucketName?.trim()
       };
 
       const res = await ApiClient.post('/pipelines', payload);
@@ -424,7 +434,11 @@ export default function PipelinesPage() {
           buildCommand: 'npm run build',
           dockerfilePath: './Dockerfile',
           environment: 'development',
-          deploymentTarget: 'docker'
+          deploymentTarget: 'aws-s3',
+          cloudAccount: '',
+          ec2InstanceId: '',
+          appPort: 3000,
+          s3BucketName: ''
         });
         showToast(`Pipeline "${res.pipeline.name}" created successfully!`, 'success');
         fetchPipelines();
@@ -449,8 +463,9 @@ export default function PipelinesPage() {
         environment: editPipeline.environment,
         deploymentTarget: editPipeline.deploymentTarget,
         cloudAccount: editPipeline.cloudAccount,
-        ec2InstanceId: editPipeline.ec2InstanceId?.trim(),
-        appPort: editPipeline.appPort
+        ec2InstanceId: editPipeline.deploymentTarget === 'aws' ? editPipeline.ec2InstanceId?.trim() : '',
+        appPort: editPipeline.deploymentTarget === 'aws' ? editPipeline.appPort : undefined,
+        s3BucketName: editPipeline.s3BucketName?.trim()
       };
 
       const res = await ApiClient.put(`/pipelines/${editPipeline.id}`, payload);
@@ -851,10 +866,26 @@ export default function PipelinesPage() {
                             <GitBranch size={12} />
                             {pipeline.branch}
                           </span>
+                          {pipeline.deploymentTarget === 'aws-s3' && (
+                            <span style={{ fontSize: '10px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                              S3 + CDN
+                            </span>
+                          )}
                         </div>
                         <div className="commit-preview">
                           <code className="commit-hash">{pipeline.commitHash}</code>
                           <span className="commit-msg">{pipeline.commitMsg}</span>
+                          {pipeline.deployedUrl && (
+                            <a
+                              href={pipeline.deployedUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ color: '#4ade80', fontSize: '11px', textDecoration: 'none', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: '600' }}
+                            >
+                              Live App ↗
+                            </a>
+                          )}
                         </div>
                       </td>
 
@@ -1068,6 +1099,48 @@ export default function PipelinesPage() {
                   <span>Triggered by <strong>{selectedPipeline.triggeredBy.name}</strong></span>
                 </div>
               </div>
+
+              {/* Live Application URL Card */}
+              {selectedPipeline.deployedUrl && (
+                <div style={{
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  borderRadius: '10px',
+                  padding: '12px 16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '20px' }}>🌐</span>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#86efac', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Permanent Live URL (24/7 Serverless)
+                      </div>
+                      <a
+                        href={selectedPipeline.deployedUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#ffffff', fontWeight: '600', textDecoration: 'underline', fontSize: '14px', wordBreak: 'break-all' }}
+                      >
+                        {selectedPipeline.deployedUrl}
+                      </a>
+                    </div>
+                  </div>
+                  <a
+                    href={selectedPipeline.deployedUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-primary btn-sm"
+                    style={{ background: '#16a34a', border: 'none', color: '#ffffff', padding: '6px 14px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', textDecoration: 'none' }}
+                  >
+                    Open Live App ↗
+                  </a>
+                </div>
+              )}
 
               {/* Execution Stages */}
               <div className="stages-section">
@@ -1317,6 +1390,30 @@ export default function PipelinesPage() {
                 <div className="form-group deployment-type-group">
                   <label className="form-label">Deployment Target</label>
                   <div className="radio-group-modern">
+                    <label className={`radio-card ${newPipeline.deploymentTarget === 'aws-s3' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="deploymentTarget"
+                        value="aws-s3"
+                        checked={newPipeline.deploymentTarget === 'aws-s3'}
+                        onChange={(e) => {
+                          setNewPipeline({ 
+                            ...newPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: '',
+                            ec2InstanceId: ''
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="radio-title">AWS S3 + CloudFront</span>
+                          <span style={{ fontSize: '10px', background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Recommended</span>
+                        </div>
+                        <span className="radio-desc">Serverless CDN • Permanent URL • Zero EC2</span>
+                      </div>
+                    </label>
+
                     <label className={`radio-card ${newPipeline.deploymentTarget === 'aws' ? 'active' : ''}`}>
                       <input
                         type="radio"
@@ -1358,6 +1455,42 @@ export default function PipelinesPage() {
                     </label>
                   </div>
                 </div>
+
+                {newPipeline.deploymentTarget === 'aws-s3' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">AWS Account (Optional)</label>
+                      <select
+                        className="form-select"
+                        value={newPipeline.cloudAccount}
+                        onChange={(e) =>
+                          setNewPipeline({ ...newPipeline, cloudAccount: e.target.value })
+                        }
+                      >
+                        <option value="">Default CloudOps AWS (Platform Managed)</option>
+                        {availableCloudAccounts.map((acc, idx) => (
+                          <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        Deploys to AWS S3 & CloudFront. 100% Serverless, stays live permanently even if your computer/EC2 is off.
+                      </span>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Custom S3 Bucket Name (Optional)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. my-app-production (leave empty to auto-generate)"
+                        value={newPipeline.s3BucketName || ''}
+                        onChange={(e) =>
+                          setNewPipeline({ ...newPipeline, s3BucketName: e.target.value })
+                        }
+                      />
+                    </div>
+                  </>
+                )}
 
                 {newPipeline.deploymentTarget === 'docker' && (
                   <div className="form-group">
@@ -1508,6 +1641,30 @@ export default function PipelinesPage() {
                 <div className="form-group deployment-type-group">
                   <label className="form-label">Deployment Target</label>
                   <div className="radio-group-modern">
+                    <label className={`radio-card ${editPipeline.deploymentTarget === 'aws-s3' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="editDeploymentTarget"
+                        value="aws-s3"
+                        checked={editPipeline.deploymentTarget === 'aws-s3'}
+                        onChange={(e) => {
+                          setEditPipeline({ 
+                            ...editPipeline, 
+                            deploymentTarget: e.target.value,
+                            dockerfilePath: '',
+                            ec2InstanceId: ''
+                          });
+                        }}
+                      />
+                      <div className="radio-content">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="radio-title">AWS S3 + CloudFront</span>
+                          <span style={{ fontSize: '10px', background: 'rgba(34, 197, 94, 0.2)', color: '#22c55e', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Recommended</span>
+                        </div>
+                        <span className="radio-desc">Serverless CDN • Permanent URL • Zero EC2</span>
+                      </div>
+                    </label>
+
                     <label className={`radio-card ${editPipeline.deploymentTarget === 'aws' ? 'active' : ''}`}>
                       <input
                         type="radio"
@@ -1549,6 +1706,42 @@ export default function PipelinesPage() {
                     </label>
                   </div>
                 </div>
+
+                {editPipeline.deploymentTarget === 'aws-s3' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label">AWS Account (Optional)</label>
+                      <select
+                        className="form-select"
+                        value={editPipeline.cloudAccount || ''}
+                        onChange={(e) =>
+                          setEditPipeline({ ...editPipeline, cloudAccount: e.target.value })
+                        }
+                      >
+                        <option value="">Default CloudOps AWS (Platform Managed)</option>
+                        {availableCloudAccounts.map((acc, idx) => (
+                          <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        Deploys to AWS S3 & CloudFront. 100% Serverless, stays live permanently even if your computer/EC2 is off.
+                      </span>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Custom S3 Bucket Name (Optional)</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. my-app-production (leave empty to auto-generate)"
+                        value={editPipeline.s3BucketName || ''}
+                        onChange={(e) =>
+                          setEditPipeline({ ...editPipeline, s3BucketName: e.target.value })
+                        }
+                      />
+                    </div>
+                  </>
+                )}
 
                 {editPipeline.deploymentTarget === 'docker' && (
                   <div className="form-group">
