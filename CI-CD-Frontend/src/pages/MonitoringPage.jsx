@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import api from '../utils/api';
 import { getSocketUrl } from '../utils/socket';
@@ -33,6 +34,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle,
+  Check,
   ExternalLink,
   Layers
 } from 'lucide-react';
@@ -87,6 +89,7 @@ const CustomTooltip = ({ active, payload, label, unit = '' }) => {
 };
 
 export default function MonitoringPage() {
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState('1h');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -191,9 +194,14 @@ export default function MonitoringPage() {
     }, 800);
   };
 
-  const handleAcknowledge = (id) => {
+  const handleAcknowledge = async (id) => {
+    try {
+      await api.put(`/alerts/${id}`, { status: 'Acknowledged' });
+    } catch (e) {
+      console.warn('Failed to persist acknowledged status to backend:', e);
+    }
     setIncidents(prev =>
-      prev.map(inc => inc.id === id ? { ...inc, ack: true } : inc)
+      prev.map(inc => inc.id === id ? { ...inc, ack: true, status: 'Acknowledged' } : inc)
     );
     setNotification('Incident acknowledged by operator');
     setTimeout(() => setNotification(''), 3000);
@@ -697,29 +705,34 @@ export default function MonitoringPage() {
 
                 <div className="incident-footer-row">
                   <div className="incident-meta">
-                    <span className="meta-item">
+                    <span className="incident-meta-item">
                       <Server size={13} /> {inc.service}
                     </span>
-                    <span className="meta-item">
+                    <span className="incident-meta-item">
                       <Clock size={13} /> {inc.time}
                     </span>
                   </div>
 
                   <div className="incident-actions">
-                    {inc.status === 'Active' && !inc.ack && (
+                    {inc.status === 'Active' && !inc.ack ? (
                       <button 
-                        className="action-btn btn-secondary"
+                        className="incident-btn incident-btn-secondary"
                         onClick={() => handleAcknowledge(inc.id)}
+                        title="Acknowledge this incident"
                       >
-                        Acknowledge
+                        <Check size={14} />
+                        <span>Acknowledge</span>
                       </button>
-                    )}
-                    {inc.status === 'Active' && inc.ack && (
-                      <span className="ack-badge">
+                    ) : (inc.ack || inc.status === 'Acknowledged') ? (
+                      <span className="incident-ack-badge">
                         <CheckCircle size={13} /> Acknowledged
                       </span>
-                    )}
-                    <button className="action-btn btn-ghost">
+                    ) : null}
+                    <button 
+                      className="incident-btn incident-btn-ghost"
+                      onClick={() => navigate('/logs', { state: { service: inc.service } })}
+                      title="View Logs & Traces"
+                    >
                       <span>Logs & Traces</span>
                       <ArrowUpRight size={14} />
                     </button>

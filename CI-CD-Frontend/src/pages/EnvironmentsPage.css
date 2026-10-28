@@ -646,7 +646,7 @@
   gap: 0.5rem;
 }
 
-.action-btn {
+.env-card-actions .action-btn {
   flex: 1;
   display: inline-flex;
   align-items: center;
@@ -663,13 +663,13 @@
   transition: all 0.2s ease;
 }
 
-.action-btn:hover {
+.env-card-actions .action-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
   border-color: #334155;
 }
 
-.action-btn-accent:hover {
+.env-card-actions .action-btn-accent:hover {
   background: rgba(59, 130, 246, 0.15);
   color: #60a5fa;
   border-color: rgba(59, 130, 246, 0.3);
