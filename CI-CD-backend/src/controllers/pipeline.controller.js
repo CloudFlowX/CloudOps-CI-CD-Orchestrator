@@ -396,6 +396,25 @@ export const executePipelineJob = async (pipelineId) => {
           }
         }
 
+        // Auto-fallback: if pipeline has no account or old account was deleted, pick active AWS account
+        if (!s3Credentials) {
+          try {
+            const anyAws = await CloudAccount.findOne({ provider: "AWS", accessKeyId: { $exists: true } }).sort({ updatedAt: -1 });
+            if (anyAws && anyAws.accessKeyId) {
+              s3Credentials = {
+                accessKeyId: anyAws.accessKeyId,
+                secretAccessKey: anyAws.secretAccessKey,
+              };
+              s3Region = anyAws.region || "us-east-1";
+              pipeline.cloudAccount = anyAws._id;
+              await pipeline.save();
+              onLog(`[DEPLOY] Auto-selected active AWS Cloud Account: "${anyAws.accountName}" (${s3Region})`);
+            }
+          } catch (autoErr) {
+            onLog(`[WARN] Auto-select AWS account note: ${autoErr.message}`);
+          }
+        }
+
         // Fallback to system-level environment credentials if configured
         if (!s3Credentials && process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
           s3Credentials = {
@@ -439,10 +458,23 @@ export const executePipelineJob = async (pipelineId) => {
          
          let publicIp = null;
          // 1. Fetch real EC2 IP
-         if (pipeline.cloudAccount && pipeline.ec2InstanceId) {
+         let resolvedCloudAccount = null;
+         if (pipeline.cloudAccount) {
+           resolvedCloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+         }
+         if (!resolvedCloudAccount) {
+           resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS", accessKeyId: { $exists: true } }).sort({ updatedAt: -1 });
+           if (resolvedCloudAccount) {
+             pipeline.cloudAccount = resolvedCloudAccount._id;
+             await pipeline.save();
+             onLog(`[DEPLOY] Auto-selected active AWS Cloud Account: "${resolvedCloudAccount.accountName}"`);
+           }
+         }
+
+         if (resolvedCloudAccount && pipeline.ec2InstanceId) {
            try {
              onLog(`[DEPLOY] Fetching EC2 instance details...`);
-             const cloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+             const cloudAccount = resolvedCloudAccount;
              if (cloudAccount && cloudAccount.provider === "AWS") {
                const ec2Client = new EC2Client({
                  region: cloudAccount.region,
