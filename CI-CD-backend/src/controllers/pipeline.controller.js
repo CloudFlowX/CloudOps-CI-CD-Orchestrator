@@ -62,6 +62,12 @@ export const createPipeline = async (req, res) => {
       });
     }
 
+    let resolvedCloudAccount = (cloudAccount && cloudAccount !== "") ? cloudAccount : null;
+    if (!resolvedCloudAccount && (deploymentTarget === "aws-s3" || deploymentTarget === "ec2")) {
+      const defaultAws = await CloudAccount.findOne({ provider: "AWS", owner: req.user._id }).sort({ updatedAt: -1 });
+      if (defaultAws) resolvedCloudAccount = defaultAws._id;
+    }
+
     const pipeline = await Pipeline.create({
       name,
       repository,
@@ -70,7 +76,7 @@ export const createPipeline = async (req, res) => {
       dockerfilePath,
       environment,
       deploymentTarget: deploymentTarget || "cloudflare",
-      cloudAccount: cloudAccount || null,
+      cloudAccount: resolvedCloudAccount,
       ec2InstanceId: ec2InstanceId || "",
       appPort: appPort || 3000,
       s3BucketName: s3BucketName || "",
@@ -190,7 +196,9 @@ export const updatePipeline = async (req, res) => {
       environment !== undefined ? environment : pipeline.environment;
     pipeline.deploymentTarget =
       deploymentTarget !== undefined ? deploymentTarget : pipeline.deploymentTarget;
-    pipeline.cloudAccount = cloudAccount !== undefined ? cloudAccount : pipeline.cloudAccount;
+    if (cloudAccount !== undefined) {
+      pipeline.cloudAccount = (cloudAccount && cloudAccount !== "") ? cloudAccount : null;
+    }
     pipeline.ec2InstanceId = ec2InstanceId !== undefined ? ec2InstanceId : pipeline.ec2InstanceId;
     pipeline.appPort = appPort !== undefined ? appPort : pipeline.appPort;
     pipeline.s3BucketName = s3BucketName !== undefined ? s3BucketName : pipeline.s3BucketName;
@@ -200,11 +208,7 @@ export const updatePipeline = async (req, res) => {
 
     await pipeline.save();
 
-    const updatedPipeline = await Pipeline.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const updatedPipeline = pipeline;
 
     // Emit socket event for real-time updates
     try {
@@ -399,7 +403,14 @@ export const executePipelineJob = async (pipelineId) => {
         // Auto-fallback: if pipeline has no account or old account was deleted, pick active AWS account
         if (!s3Credentials) {
           try {
-            const anyAws = await CloudAccount.findOne({ provider: "AWS", accessKeyId: { $exists: true } }).sort({ updatedAt: -1 });
+            let anyAws = null;
+            if (pipeline.createdBy) {
+              anyAws = await CloudAccount.findOne({ provider: "AWS", owner: pipeline.createdBy }).sort({ updatedAt: -1 });
+            }
+            if (!anyAws) {
+              anyAws = await CloudAccount.findOne({ provider: "AWS" }).sort({ updatedAt: -1 });
+            }
+
             if (anyAws && anyAws.accessKeyId) {
               s3Credentials = {
                 accessKeyId: anyAws.accessKeyId,
@@ -426,7 +437,10 @@ export const executePipelineJob = async (pipelineId) => {
         }
 
         if (!s3Credentials) {
-          throw new Error("AWS Credentials not found. Please select an AWS Cloud Account in pipeline settings or add AWS_ACCESS_KEY_ID to environment variables.");
+          onLog(`[ERROR] AWS Credentials not found.`);
+          onLog(`[HINT] 1. Go to 'Cloud Accounts' page -> Ensure your AWS account is connected with Access Key and Secret Key.`);
+          onLog(`[HINT] 2. Go to Pipelines -> Edit this pipeline -> select your AWS account in the dropdown.`);
+          throw new Error("AWS Credentials not found. Please connect your AWS Cloud Account or select it in pipeline settings.");
         }
 
         const s3Result = await deployToS3AndCloudFront({
@@ -463,7 +477,12 @@ export const executePipelineJob = async (pipelineId) => {
            resolvedCloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
          }
          if (!resolvedCloudAccount) {
-           resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS", accessKeyId: { $exists: true } }).sort({ updatedAt: -1 });
+           if (pipeline.createdBy) {
+             resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS", owner: pipeline.createdBy }).sort({ updatedAt: -1 });
+           }
+           if (!resolvedCloudAccount) {
+             resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS" }).sort({ updatedAt: -1 });
+           }
            if (resolvedCloudAccount) {
              pipeline.cloudAccount = resolvedCloudAccount._id;
              await pipeline.save();

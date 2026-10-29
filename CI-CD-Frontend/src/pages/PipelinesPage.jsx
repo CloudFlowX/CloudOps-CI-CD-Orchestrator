@@ -1099,108 +1099,74 @@ export default function PipelinesPage() {
               </button>
             </div>
 
-            <div className="modal-body">
-              {/* Commit details card */}
-              <div className="modal-commit-card">
-                <div className="commit-header">
-                  <span className="commit-title">{selectedPipeline.commitMsg}</span>
-                  <span className="started-time">Triggered {selectedPipeline.startedAt}</span>
-                </div>
-                <div className="commit-author">
+            <div className="modal-body pipeline-log-modal-body">
+              {/* Top Compact Bar: Trigger Info + Live URL Button */}
+              <div className="modal-meta-bar">
+                <div className="meta-bar-left">
                   {renderTriggerAvatar(selectedPipeline.triggeredBy)}
-                  <span>Triggered by <strong>{selectedPipeline.triggeredBy.name}</strong></span>
+                  <div className="meta-text-group">
+                    <div className="meta-main-row">
+                      <span className="commit-title-text">{selectedPipeline.commitMsg || 'Pipeline execution'}</span>
+                      <span className="meta-dot">•</span>
+                      <span className="started-time-text">Triggered {selectedPipeline.startedAt}</span>
+                    </div>
+                    <span className="author-subtext">by <strong>{selectedPipeline.triggeredBy?.name || 'User'}</strong></span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Live Application URL Card */}
-              {selectedPipeline.deployedUrl && (
-                <div style={{
-                  background: 'rgba(34, 197, 94, 0.1)',
-                  border: '1px solid rgba(34, 197, 94, 0.3)',
-                  borderRadius: '10px',
-                  padding: '12px 16px',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  flexWrap: 'wrap'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '20px' }}>🌐</span>
-                    <div>
-                      <div style={{ fontSize: '11px', color: '#86efac', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Permanent Live URL (24/7 Serverless)
-                      </div>
+                {/* Live Application URL Pill */}
+                {selectedPipeline.deployedUrl && (
+                  <div className="meta-bar-right-url">
+                    <span className="live-status-pulse"></span>
+                    <div className="url-info-col">
+                      <span className="url-badge-label">Live App</span>
                       <a
                         href={selectedPipeline.deployedUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: '#ffffff', fontWeight: '600', textDecoration: 'underline', fontSize: '14px', wordBreak: 'break-all' }}
+                        className="url-display-link"
+                        title={selectedPipeline.deployedUrl}
                       >
-                        {selectedPipeline.deployedUrl}
+                        {selectedPipeline.deployedUrl.replace('https://', '').replace('http://', '')}
                       </a>
                     </div>
+                    <a
+                      href={selectedPipeline.deployedUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-open-live-pill"
+                    >
+                      Open ↗
+                    </a>
                   </div>
-                  <a
-                    href={selectedPipeline.deployedUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn btn-primary btn-sm"
-                    style={{ background: '#16a34a', border: 'none', color: '#ffffff', padding: '6px 14px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', textDecoration: 'none' }}
-                  >
-                    Open Live App ↗
-                  </a>
-                </div>
-              )}
+                )}
+              </div>
 
-              {/* Execution Stages */}
-              <div className="stages-section">
-                <h4 className="section-title">Execution Stages</h4>
-                <div className="stages-timeline">
+              {/* Compact Execution Stages Bar */}
+              <div className="stages-compact-bar">
+                <span className="stages-compact-title">Stages:</span>
+                <div className="stages-pills-container">
                   {getPipelineStages(selectedPipeline).map((stage, idx) => (
                     <div
                       key={idx}
-                      className={`stage-card stage-${stage.status}`}
+                      className={`stage-pill-card stage-status-${stage.status}`}
                     >
-                      <div className="stage-header">
-                        <span className="stage-name">{stage.name}</span>
-                        <span className="stage-duration">{stage.duration}</span>
-                      </div>
-                      <div className="stage-status-indicator">
-                        {stage.status === 'success' && (
-                          <span className="status-label text-success">
-                            <Check size={14} /> Passed
-                          </span>
-                        )}
-                        {stage.status === 'failed' && (
-                          <span className="status-label text-failed">
-                            <X size={14} /> Failed
-                          </span>
-                        )}
-                        {stage.status === 'running' && (
-                          <span className="status-label text-running">
-                            <RefreshCw size={14} className="spin-icon" /> In Progress
-                          </span>
-                        )}
-                        {stage.status === 'pending' && (
-                          <span className="status-label text-pending">
-                            <Clock size={14} /> Pending
-                          </span>
-                        )}
-                        {stage.status === 'skipped' && (
-                          <span className="status-label text-muted">
-                            Skipped
-                          </span>
-                        )}
-                      </div>
+                      <span className="stage-pill-icon">
+                        {stage.status === 'success' && <Check size={12} />}
+                        {stage.status === 'failed' && <X size={12} />}
+                        {stage.status === 'running' && <RefreshCw size={12} className="spin-icon" />}
+                        {stage.status === 'pending' && <Clock size={12} />}
+                        {stage.status === 'skipped' && '—'}
+                      </span>
+                      <span className="stage-pill-name">{stage.name}</span>
+                      <span className="stage-pill-duration">{stage.duration}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Terminal Execution Logs */}
-              <div className={`terminal-box ${isTerminalExpanded ? 'expanded' : ''}`}>
+              {/* Terminal Execution Logs - Full Height & Spacious */}
+              <div className={`terminal-box large-terminal-box ${isTerminalExpanded ? 'expanded' : ''}`}>
                 <div className="terminal-header">
                   <div className="terminal-dots">
                     <span className="dot dot-red"></span>
@@ -1208,10 +1174,10 @@ export default function PipelinesPage() {
                     <span className="dot dot-green"></span>
                   </div>
                   <div className="terminal-title-bar">
-                    <Terminal size={13} className="terminal-icon" />
+                    <Terminal size={14} className="terminal-icon" />
                     <span className="terminal-title">build-log.stdout</span>
                     <span className="terminal-count-badge">
-                      {liveLogs.reduce((acc, chunk) => acc + String(chunk).split('\n').length, 0)} lines
+                      {liveLogs.reduce((acc, chunk) => acc + String(chunk).split('\n').length, 0)} lines executed
                     </span>
                   </div>
                   <div className="terminal-actions">
@@ -1257,7 +1223,7 @@ export default function PipelinesPage() {
                     </button>
                   </div>
                 </div>
-                <div className={`terminal-content ${isTerminalExpanded ? 'expanded' : ''}`} ref={terminalRef}>
+                <div className={`terminal-content large-terminal-content ${isTerminalExpanded ? 'expanded' : ''}`} ref={terminalRef}>
                   {liveLogs.length > 0 ? (
                     (() => {
                       let lineNumberCounter = 1;
@@ -1520,7 +1486,7 @@ export default function PipelinesPage() {
                           setNewPipeline({ ...newPipeline, cloudAccount: e.target.value })
                         }
                       >
-                        <option value="">Default CloudOps AWS (Platform Managed)</option>
+                        <option value="">⚡ Auto-Use Connected AWS Account ({availableCloudAccounts[0]?.accountName || 'Active Account'})</option>
                         {availableCloudAccounts.map((acc, idx) => (
                           <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
                         ))}
@@ -1818,7 +1784,7 @@ export default function PipelinesPage() {
                           setEditPipeline({ ...editPipeline, cloudAccount: e.target.value })
                         }
                       >
-                        <option value="">Default CloudOps AWS (Platform Managed)</option>
+                        <option value="">⚡ Auto-Use Connected AWS Account ({availableCloudAccounts[0]?.accountName || 'Active Account'})</option>
                         {availableCloudAccounts.map((acc, idx) => (
                           <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>{acc.accountName} ({acc.environment})</option>
                         ))}
