@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 import './PipelinesPage.css';
 import {
   Plus,
@@ -45,11 +46,14 @@ import { getSocketUrl } from '../utils/socket';
 
 export default function PipelinesPage() {
   const { currentRole } = useRole();
+  const { user: authUser } = useAuth();
+  const isAdmin = currentRole?.toLowerCase() === 'admin' || authUser?.role === 'admin';
   const navigate = useNavigate();
   const [pipelines, setPipelines] = useState([]);
   const [availableRepos, setAvailableRepos] = useState([]);
   const [availableCloudAccounts, setAvailableCloudAccounts] = useState([]);
   const [activeTab, setActiveTab] = useState('All');
+  const [scopeFilter, setScopeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
@@ -140,6 +144,15 @@ export default function PipelinesPage() {
       }));
     });
 
+    socket.on("developer_activity", (data) => {
+      showToast(`⚡ ${data.user} (${data.userRole}): ${data.action} on "${data.pipeline}"`, 'info');
+      fetchPipelines();
+    });
+
+    socket.on("pipeline_deleted", ({ id }) => {
+      setPipelines(prev => prev.filter(p => p.id !== id));
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -169,6 +182,10 @@ export default function PipelinesPage() {
           deployedUrl: p.deployedUrl || '',
           containerPort: p.containerPort || p.appPort || 5000,
           envVars: p.envVars || [],
+          visibility: p.visibility || 'team',
+          createdBy: p.createdBy || null,
+          createdById: p.createdBy?._id || p.createdBy || '',
+          creatorRole: p.createdBy?.role || 'developer',
           cloudAccount: p.cloudAccount?._id || p.cloudAccount || '',
           ec2InstanceId: p.ec2InstanceId || '',
           appPort: p.appPort || 3000,
@@ -216,6 +233,7 @@ export default function PipelinesPage() {
     buildCommand: 'npm run build',
     dockerfilePath: './Dockerfile',
     environment: 'development',
+    visibility: 'team',
     deploymentTarget: 'cloudflare',
     cloudAccount: '',
     ec2InstanceId: '',
@@ -348,6 +366,17 @@ export default function PipelinesPage() {
         if (activeTab === 'Failed' && item.status !== 'Failed') return false;
         if (activeTab === 'Queued' && item.status !== 'Queued') return false;
 
+        // Scope Filter (RBAC & Workspace Isolation)
+        if (scopeFilter === 'mine') {
+          const myId = authUser?._id || authUser?.id;
+          const isMine = myId && (item.createdById === myId || item.createdBy?._id === myId || (authUser?.fullName && item.triggeredBy?.name === authUser.fullName));
+          if (!isMine) return false;
+        } else if (scopeFilter === 'team') {
+          if (item.visibility !== 'team') return false;
+        } else if (scopeFilter === 'admin_only') {
+          if (item.visibility !== 'admin_only') return false;
+        }
+
         // Branch Filter
         if (branchFilter !== 'all' && item.branch !== branchFilter) return false;
 
@@ -371,7 +400,7 @@ export default function PipelinesPage() {
         if (sortBy === 'duration') return b.duration.localeCompare(a.duration);
         return 0;
       });
-  }, [pipelines, activeTab, branchFilter, searchQuery, sortBy]);
+  }, [pipelines, activeTab, scopeFilter, authUser, branchFilter, searchQuery, sortBy]);
 
   // Bulk Selection Handlers
   const handleSelectAll = (e) => {
@@ -524,6 +553,7 @@ export default function PipelinesPage() {
         buildCommand: newPipeline.buildCommand,
         dockerfilePath: newPipeline.dockerfilePath,
         environment: newPipeline.environment,
+        visibility: newPipeline.visibility || 'team',
         deploymentTarget: newPipeline.deploymentTarget,
         cloudAccount: newPipeline.cloudAccount,
         ec2InstanceId: (newPipeline.deploymentTarget === 'aws' || newPipeline.deploymentTarget === 'docker') ? newPipeline.ec2InstanceId?.trim() : '',
@@ -546,6 +576,7 @@ export default function PipelinesPage() {
           buildCommand: 'npm run build',
           dockerfilePath: './Dockerfile',
           environment: 'development',
+          visibility: 'team',
           deploymentTarget: 'cloudflare',
           cloudAccount: '',
           ec2InstanceId: '',
@@ -576,6 +607,7 @@ export default function PipelinesPage() {
         buildCommand: editPipeline.buildCommand,
         dockerfilePath: editPipeline.dockerfilePath,
         environment: editPipeline.environment,
+        visibility: editPipeline.visibility || 'team',
         deploymentTarget: editPipeline.deploymentTarget,
         cloudAccount: editPipeline.cloudAccount,
         ec2InstanceId: (editPipeline.deploymentTarget === 'aws' || editPipeline.deploymentTarget === 'docker') ? editPipeline.ec2InstanceId?.trim() : '',
@@ -635,6 +667,7 @@ export default function PipelinesPage() {
     setEditPipeline({
       ...pipeline,
       id: pipeline.id || pipeline._id,
+      visibility: pipeline.visibility || 'team',
       containerPort: pipeline.containerPort || pipeline.appPort || 5000,
       envVars: Array.isArray(pipeline.envVars) && pipeline.envVars.length > 0
         ? pipeline.envVars.map(v => ({ key: v.key || '', value: v.value || '', isSecret: !!v.isSecret, showVal: false }))
@@ -898,6 +931,40 @@ export default function PipelinesPage() {
 
       {/* Filter / Tab Bar */}
       <div className="pipelines-toolbar-card">
+        {/* Workspace RBAC Isolation Filter */}
+        <div className="workspace-scope-tabs">
+          <button
+            type="button"
+            className={`scope-pill ${scopeFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setScopeFilter('all')}
+          >
+            🌐 All Available
+          </button>
+          <button
+            type="button"
+            className={`scope-pill ${scopeFilter === 'mine' ? 'active' : ''}`}
+            onClick={() => setScopeFilter('mine')}
+          >
+            👤 My Pipelines
+          </button>
+          <button
+            type="button"
+            className={`scope-pill ${scopeFilter === 'team' ? 'active' : ''}`}
+            onClick={() => setScopeFilter('team')}
+          >
+            👥 Team Shared
+          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className={`scope-pill admin-scope ${scopeFilter === 'admin_only' ? 'active' : ''}`}
+              onClick={() => setScopeFilter('admin_only')}
+            >
+              🔒 Admin Only
+            </button>
+          )}
+        </div>
+
         <div className="pipelines-tabs">
           <button
             className={`tab-item ${activeTab === 'All' ? 'active' : ''}`}
@@ -1096,6 +1163,21 @@ export default function PipelinesPage() {
                               🐳 Docker API
                             </span>
                           )}
+                          {pipeline.visibility === 'admin_only' && (
+                            <span style={{ fontSize: '10px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                              🔒 Admin Only
+                            </span>
+                          )}
+                          {pipeline.visibility === 'private' && (
+                            <span style={{ fontSize: '10px', background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(148, 163, 184, 0.3)' }}>
+                              👤 Private
+                            </span>
+                          )}
+                          {pipeline.visibility === 'team' && (
+                            <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                              👥 Team
+                            </span>
+                          )}
                         </div>
                         <div className="commit-preview">
                           <code className="commit-hash">{pipeline.commitHash}</code>
@@ -1133,6 +1215,18 @@ export default function PipelinesPage() {
                         <div className="user-profile">
                           {renderTriggerAvatar(pipeline.triggeredBy)}
                           <span className="user-name">{pipeline.triggeredBy.name}</span>
+                          <span style={{
+                            fontSize: '9.5px',
+                            fontWeight: '700',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            marginLeft: '4px',
+                            background: pipeline.creatorRole === 'admin' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                            color: pipeline.creatorRole === 'admin' ? '#c084fc' : '#60a5fa',
+                            border: `1px solid ${pipeline.creatorRole === 'admin' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`
+                          }}>
+                            {pipeline.creatorRole === 'admin' ? 'Admin' : 'Dev'}
+                          </span>
                         </div>
                       </td>
 
@@ -1671,6 +1765,55 @@ export default function PipelinesPage() {
                   </div>
                 </div>
 
+                <div className="form-group">
+                  <label className="form-label">Project Visibility & Access Control</label>
+                  <div className="radio-group-modern">
+                    <label className={`radio-card ${newPipeline.visibility === 'team' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="newVisibility"
+                        value="team"
+                        checked={newPipeline.visibility === 'team'}
+                        onChange={(e) => setNewPipeline({ ...newPipeline, visibility: e.target.value })}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">👥 Team Shared</span>
+                        <span className="radio-desc">Visible to all developers and admins</span>
+                      </div>
+                    </label>
+
+                    {isAdmin && (
+                      <label className={`radio-card ${newPipeline.visibility === 'admin_only' ? 'active' : ''}`}>
+                        <input
+                          type="radio"
+                          name="newVisibility"
+                          value="admin_only"
+                          checked={newPipeline.visibility === 'admin_only'}
+                          onChange={(e) => setNewPipeline({ ...newPipeline, visibility: e.target.value })}
+                        />
+                        <div className="radio-content">
+                          <span className="radio-title">🔒 Admin Only (Confidential)</span>
+                          <span className="radio-desc">Strictly hidden from regular developers</span>
+                        </div>
+                      </label>
+                    )}
+
+                    <label className={`radio-card ${newPipeline.visibility === 'private' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="newVisibility"
+                        value="private"
+                        checked={newPipeline.visibility === 'private'}
+                        onChange={(e) => setNewPipeline({ ...newPipeline, visibility: e.target.value })}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">👤 Private to Creator</span>
+                        <span className="radio-desc">Only visible to you and admins</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 {newPipeline.deploymentTarget === 'cloudflare' && (
                   <>
                     <div className="form-group">
@@ -2036,6 +2179,55 @@ export default function PipelinesPage() {
                           <span style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Backend API • Auto-Dockerfile</span>
                         </div>
                         <span className="radio-desc">Node.js, Python, or Go • Auto-generates Dockerfile • Injects .env Secrets</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Project Visibility & Access Control</label>
+                  <div className="radio-group-modern">
+                    <label className={`radio-card ${editPipeline.visibility === 'team' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="editVisibility"
+                        value="team"
+                        checked={editPipeline.visibility === 'team'}
+                        onChange={(e) => setEditPipeline({ ...editPipeline, visibility: e.target.value })}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">👥 Team Shared</span>
+                        <span className="radio-desc">Visible to all developers and admins</span>
+                      </div>
+                    </label>
+
+                    {isAdmin && (
+                      <label className={`radio-card ${editPipeline.visibility === 'admin_only' ? 'active' : ''}`}>
+                        <input
+                          type="radio"
+                          name="editVisibility"
+                          value="admin_only"
+                          checked={editPipeline.visibility === 'admin_only'}
+                          onChange={(e) => setEditPipeline({ ...editPipeline, visibility: e.target.value })}
+                        />
+                        <div className="radio-content">
+                          <span className="radio-title">🔒 Admin Only (Confidential)</span>
+                          <span className="radio-desc">Strictly hidden from regular developers</span>
+                        </div>
+                      </label>
+                    )}
+
+                    <label className={`radio-card ${editPipeline.visibility === 'private' ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="editVisibility"
+                        value="private"
+                        checked={editPipeline.visibility === 'private'}
+                        onChange={(e) => setEditPipeline({ ...editPipeline, visibility: e.target.value })}
+                      />
+                      <div className="radio-content">
+                        <span className="radio-title">👤 Private to Creator</span>
+                        <span className="radio-desc">Only visible to you and admins</span>
                       </div>
                     </label>
                   </div>

@@ -35,6 +35,12 @@ const pipelineSchema = new mongoose.Schema(
       default: "development",
     },
 
+    visibility: {
+      type: String,
+      enum: ["team", "admin_only", "private"],
+      default: "team",
+    },
+
     deploymentTarget: {
       type: String,
       enum: ["docker", "kubernetes", "aws", "azure", "aws-s3", "cloudflare"],

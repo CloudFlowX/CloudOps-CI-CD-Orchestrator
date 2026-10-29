@@ -16,6 +16,8 @@ import { NodeSSH } from "node-ssh";
 import mongoose from "mongoose";
 import { getIO } from "../config/socket.js";
 import logger from "../config/logger.js";
+import { createAuditLog } from "./auditLog.controller.js";
+import { triggerAlert } from "../utils/alertHelper.js";
 import {
   cloneRepository,
   buildProject,
@@ -51,6 +53,7 @@ export const createPipeline = async (req, res) => {
       appPort,
       containerPort,
       envVars,
+      visibility,
       s3BucketName,
       cloudflareProjectName,
     } = req.body;
@@ -88,6 +91,12 @@ export const createPipeline = async (req, res) => {
           }))
       : [];
 
+    // Role-based visibility enforcement
+    let finalVisibility = visibility || "team";
+    if (finalVisibility === "admin_only" && req.user.role !== "admin") {
+      finalVisibility = "private"; // Non-admins cannot create admin_only pipelines
+    }
+
     const pipeline = await Pipeline.create({
       name,
       repository,
@@ -95,6 +104,7 @@ export const createPipeline = async (req, res) => {
       buildCommand,
       dockerfilePath,
       environment,
+      visibility: finalVisibility,
       deploymentTarget: deploymentTarget || "cloudflare",
       cloudAccount: resolvedCloudAccount,
       ec2InstanceId: ec2InstanceId || "",
@@ -105,6 +115,50 @@ export const createPipeline = async (req, res) => {
       cloudflareProjectName: cloudflareProjectName || "",
       createdBy: req.user._id,
     });
+
+    // Record Audit Log
+    try {
+      await createAuditLog({
+        action: "CREATE_PIPELINE",
+        user: req.user._id,
+        resource: "Pipeline",
+        resourceId: pipeline._id.toString(),
+        details: `${req.user.fullName} (${req.user.role}) created pipeline "${pipeline.name}" with visibility "${finalVisibility}"`,
+        status: "success",
+        ipAddress: req.ip || "127.0.0.1",
+      });
+    } catch (auditErr) {
+      logger.warn("Audit log creation warning:", auditErr.message);
+    }
+
+    // If a developer created the pipeline, notify the admin via Alert & Socket
+    if (req.user.role !== "admin") {
+      try {
+        await triggerAlert({
+          title: "Developer Activity: Pipeline Created",
+          service: pipeline.name,
+          message: `Developer ${req.user.fullName} created a new pipeline "${pipeline.name}" (${pipeline.deploymentTarget})`,
+          severity: "Low",
+          metric: "Pipeline",
+          threshold: "Created",
+          currentValue: "Success",
+        });
+      } catch (alertErr) {
+        logger.warn("Alert trigger warning:", alertErr.message);
+      }
+    }
+
+    // Broadcast activity to admin dashboard
+    try {
+      getIO().emit("developer_activity", {
+        user: req.user.fullName,
+        userRole: req.user.role,
+        pipeline: pipeline.name,
+        action: "created pipeline",
+        visibility: finalVisibility,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (sockErr) {}
 
     return res.status(201).json({
       success: true,
@@ -122,14 +176,51 @@ export const createPipeline = async (req, res) => {
 };
 
 // ======================================
-// Get All Pipelines
+// Get All Pipelines (Role-Based Visibility)
 // ======================================
 export const getAllPipelines = async (req, res) => {
   try {
-    const pipelines = await Pipeline.find()
+    let query = {};
+    const isAdmin = req.user && req.user.role === "admin";
+
+    // Non-admin developers/viewers:
+    // 1. Can see 'team' shared pipelines
+    // 2. Can see their own created pipelines ('createdBy': req.user._id)
+    // 3. Can see legacy pipelines without visibility tag
+    // 4. CANNOT see 'admin_only' pipelines!
+    if (!isAdmin) {
+      query = {
+        $and: [
+          { visibility: { $ne: "admin_only" } },
+          {
+            $or: [
+              { visibility: "team" },
+              { visibility: { $exists: false } },
+              { visibility: null },
+              { createdBy: req.user?._id },
+            ],
+          },
+        ],
+      };
+    }
+
+    const rawPipelines = await Pipeline.find(query)
       .populate("repository", "name githubUrl branch")
       .populate("createdBy", "fullName email role")
       .sort({ createdAt: -1 });
+
+    // For non-admin developers: Mask secret environment variables if they didn't create the pipeline!
+    const pipelines = rawPipelines.map((p) => {
+      const pObj = p.toObject();
+      const isOwner = req.user && pObj.createdBy && pObj.createdBy._id && pObj.createdBy._id.toString() === req.user._id.toString();
+
+      if (!isAdmin && !isOwner && Array.isArray(pObj.envVars)) {
+        pObj.envVars = pObj.envVars.map((v) =>
+          v.isSecret ? { ...v, value: "••••••••" } : v
+        );
+      }
+      return pObj;
+    });
 
     return res.status(200).json({
       success: true,
@@ -164,9 +255,35 @@ export const getPipelineById = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && req.user.role === "admin";
+    const isOwner = req.user && pipeline.createdBy && pipeline.createdBy._id && pipeline.createdBy._id.toString() === req.user._id.toString();
+
+    // Check if non-admin is trying to access an admin_only pipeline
+    if (pipeline.visibility === "admin_only" && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: This pipeline is restricted to Admins only.",
+      });
+    }
+
+    // Check if private pipeline created by someone else
+    if (pipeline.visibility === "private" && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: This pipeline is private to its creator.",
+      });
+    }
+
+    const pObj = pipeline.toObject();
+    if (!isAdmin && !isOwner && Array.isArray(pObj.envVars)) {
+      pObj.envVars = pObj.envVars.map((v) =>
+        v.isSecret ? { ...v, value: "••••••••" } : v
+      );
+    }
+
     return res.status(200).json({
       success: true,
-      pipeline,
+      pipeline: pObj,
     });
   } catch (error) {
     logger.error("GET PIPELINE ERROR:", error);
@@ -191,6 +308,7 @@ export const updatePipeline = async (req, res) => {
       buildCommand,
       dockerfilePath,
       environment,
+      visibility,
       deploymentTarget,
       cloudAccount,
       ec2InstanceId,
@@ -211,6 +329,25 @@ export const updatePipeline = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && req.user.role === "admin";
+    const isOwner = req.user && pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    // Permission enforcement: Non-admins cannot edit admin_only pipelines
+    if (pipeline.visibility === "admin_only" && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: Only Admins can modify this pipeline.",
+      });
+    }
+
+    // Permission enforcement: Non-admins cannot edit other developers' private pipelines
+    if (pipeline.visibility === "private" && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You do not have permission to edit this pipeline.",
+      });
+    }
+
     pipeline.name = name !== undefined ? name : pipeline.name;
     pipeline.branch = branch !== undefined ? branch : pipeline.branch;
     pipeline.buildCommand = buildCommand !== undefined ? buildCommand : pipeline.buildCommand;
@@ -218,6 +355,15 @@ export const updatePipeline = async (req, res) => {
       dockerfilePath !== undefined ? dockerfilePath : pipeline.dockerfilePath;
     pipeline.environment =
       environment !== undefined ? environment : pipeline.environment;
+
+    if (visibility !== undefined) {
+      if (visibility === "admin_only" && !isAdmin) {
+        pipeline.visibility = "private";
+      } else {
+        pipeline.visibility = visibility;
+      }
+    }
+
     pipeline.deploymentTarget =
       deploymentTarget !== undefined ? deploymentTarget : pipeline.deploymentTarget;
     if (cloudAccount !== undefined) {
@@ -244,9 +390,44 @@ export const updatePipeline = async (req, res) => {
 
     const updatedPipeline = pipeline;
 
-    // Emit socket event for real-time updates
+    // Record Audit Log
+    try {
+      await createAuditLog({
+        action: "UPDATE_PIPELINE",
+        user: req.user._id,
+        resource: "Pipeline",
+        resourceId: pipeline._id.toString(),
+        details: `${req.user.fullName} (${req.user.role}) updated configuration for pipeline "${pipeline.name}"`,
+        status: "success",
+        ipAddress: req.ip || "127.0.0.1",
+      });
+    } catch (auditErr) {}
+
+    // Alert Admin if developer modified a pipeline
+    if (!isAdmin) {
+      try {
+        await triggerAlert({
+          title: "Developer Activity: Pipeline Updated",
+          service: pipeline.name,
+          message: `Developer ${req.user.fullName} updated pipeline "${pipeline.name}"`,
+          severity: "Low",
+          metric: "Config Change",
+          threshold: "Modified",
+          currentValue: "Updated",
+        });
+      } catch (alertErr) {}
+    }
+
+    // Broadcast Socket Event
     try {
       getIO().emit("pipeline_updated", updatedPipeline);
+      getIO().emit("developer_activity", {
+        user: req.user.fullName,
+        userRole: req.user.role,
+        pipeline: pipeline.name,
+        action: "updated configuration",
+        timestamp: new Date().toISOString(),
+      });
     } catch (err) {
       logger.error("Socket error on update: " + err.message);
     }
@@ -282,7 +463,59 @@ export const deletePipeline = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && req.user.role === "admin";
+    const isOwner = req.user && pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    // Non-admins can only delete pipelines they created
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You can only delete pipelines you created.",
+      });
+    }
+
+    const pipelineName = pipeline.name;
     await pipeline.deleteOne();
+
+    // Record Audit Log
+    try {
+      await createAuditLog({
+        action: "DELETE_PIPELINE",
+        user: req.user._id,
+        resource: "Pipeline",
+        resourceId: id,
+        details: `${req.user.fullName} (${req.user.role}) deleted pipeline "${pipelineName}"`,
+        status: "warning",
+        ipAddress: req.ip || "127.0.0.1",
+      });
+    } catch (auditErr) {}
+
+    // Alert Admin if developer deleted a pipeline
+    if (!isAdmin) {
+      try {
+        await triggerAlert({
+          title: "Developer Activity: Pipeline Deleted",
+          service: pipelineName,
+          message: `Developer ${req.user.fullName} deleted pipeline "${pipelineName}"`,
+          severity: "Medium",
+          metric: "Deletion",
+          threshold: "Deleted",
+          currentValue: "Removed",
+        });
+      } catch (alertErr) {}
+    }
+
+    // Broadcast Socket Event
+    try {
+      getIO().emit("pipeline_deleted", { id });
+      getIO().emit("developer_activity", {
+        user: req.user.fullName,
+        userRole: req.user.role,
+        pipeline: pipelineName,
+        action: "deleted pipeline",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {}
 
     return res.status(200).json({
       success: true,
@@ -1067,6 +1300,25 @@ export const triggerPipeline = async (req, res) => {
       });
     }
 
+    const isAdmin = req.user && req.user.role === "admin";
+    const isOwner = req.user && pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    // Permission enforcement: Non-admins cannot trigger admin_only pipelines
+    if (pipeline.visibility === "admin_only" && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: Only Admins can execute this restricted pipeline.",
+      });
+    }
+
+    // Permission enforcement: Non-admins cannot trigger other developers' private pipelines
+    if (pipeline.visibility === "private" && !isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: You do not have permission to trigger this private pipeline.",
+      });
+    }
+
     // Find Repository
     const repository = await Repository.findById(
       pipeline.repository
@@ -1078,6 +1330,45 @@ export const triggerPipeline = async (req, res) => {
         message: "Repository not found.",
       });
     }
+
+    // Record Audit Log
+    try {
+      await createAuditLog({
+        action: "TRIGGER_PIPELINE",
+        user: req.user._id,
+        resource: "Pipeline",
+        resourceId: pipeline._id.toString(),
+        details: `${req.user.fullName} (${req.user.role}) triggered manual execution for "${pipeline.name}"`,
+        status: "success",
+        ipAddress: req.ip || "127.0.0.1",
+      });
+    } catch (auditErr) {}
+
+    // Alert Admin if non-admin developer triggered the pipeline
+    if (!isAdmin) {
+      try {
+        await triggerAlert({
+          title: "Developer Activity: Pipeline Run",
+          service: pipeline.name,
+          message: `Developer ${req.user.fullName} triggered manual execution for "${pipeline.name}"`,
+          severity: "Low",
+          metric: "Build",
+          threshold: "Manual",
+          currentValue: "Running",
+        });
+      } catch (alertErr) {}
+    }
+
+    // Broadcast Activity to Admin Dashboard
+    try {
+      getIO().emit("developer_activity", {
+        user: req.user.fullName,
+        userRole: req.user.role,
+        pipeline: pipeline.name,
+        action: "triggered pipeline execution",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (sockErr) {}
 
     // Update status to running and initialize fresh log array
     pipeline.status = "running";
