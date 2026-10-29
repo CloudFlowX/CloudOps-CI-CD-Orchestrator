@@ -187,9 +187,8 @@ export const deployToCloudflarePages = async ({
         cleanStdout.includes(".pages.dev");
 
       if (isSuccess) {
-        // Extract live URL from stdout if present, or use default pages.dev domain
-        const match = cleanStdout.match(/https:\/\/[a-zA-Z0-9.-]+\.pages\.dev/);
-        const liveUrl = match ? match[0] : `https://${projectName}.pages.dev`;
+        // Prefer clean primary project production URL (e.g. https://collage-621.pages.dev) instead of ugly preview hash (https://0daf1f65.collage-621.pages.dev)
+        const liveUrl = `https://${projectName}.pages.dev`;
 
         onLog(`[DEPLOY] ====================================================`);
         onLog(`[DEPLOY] 🎉 CLOUDFLARE PAGES DEPLOYMENT SUCCESSFUL!`);
