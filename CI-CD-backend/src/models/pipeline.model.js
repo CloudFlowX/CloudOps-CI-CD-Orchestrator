@@ -72,6 +72,22 @@ const pipelineSchema = new mongoose.Schema(
       default: null,
     },
 
+    envVars: [
+      {
+        key: {
+          type: String,
+          trim: true,
+        },
+        value: {
+          type: String,
+        },
+        isSecret: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+
     cloudAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "CloudAccount",

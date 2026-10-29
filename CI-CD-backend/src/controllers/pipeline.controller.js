@@ -5,6 +5,13 @@ import CloudAccount from "../models/cloudAccount.model.js";
 import { EC2Client, DescribeInstancesCommand, AuthorizeSecurityGroupIngressCommand, StartInstancesCommand } from "@aws-sdk/client-ec2";
 import { deployToS3AndCloudFront } from "../services/s3Deploy.service.js";
 import { deployToCloudflarePages } from "../services/cloudflareDeploy.service.js";
+import {
+  ensureDockerfile,
+  generateDockerfileContent,
+  deployDockerLocal,
+  deployDockerRemoteSSH,
+  formatDotEnvString,
+} from "../services/dockerDeploy.service.js";
 import { NodeSSH } from "node-ssh";
 import mongoose from "mongoose";
 import { getIO } from "../config/socket.js";
@@ -42,6 +49,8 @@ export const createPipeline = async (req, res) => {
       cloudAccount,
       ec2InstanceId,
       appPort,
+      containerPort,
+      envVars,
       s3BucketName,
       cloudflareProjectName,
     } = req.body;
@@ -63,10 +72,21 @@ export const createPipeline = async (req, res) => {
     }
 
     let resolvedCloudAccount = (cloudAccount && cloudAccount !== "") ? cloudAccount : null;
-    if (!resolvedCloudAccount && (deploymentTarget === "aws-s3" || deploymentTarget === "ec2")) {
+    if (!resolvedCloudAccount && (deploymentTarget === "aws-s3" || deploymentTarget === "ec2" || deploymentTarget === "docker")) {
       const defaultAws = await CloudAccount.findOne({ provider: "AWS", owner: req.user._id }).sort({ updatedAt: -1 });
       if (defaultAws) resolvedCloudAccount = defaultAws._id;
     }
+
+    const resolvedPort = Number(containerPort) || Number(appPort) || 5000;
+    const cleanEnvVars = Array.isArray(envVars)
+      ? envVars
+          .filter((v) => v && v.key && String(v.key).trim() !== "")
+          .map((v) => ({
+            key: String(v.key).trim(),
+            value: v.value !== undefined ? String(v.value) : "",
+            isSecret: !!v.isSecret,
+          }))
+      : [];
 
     const pipeline = await Pipeline.create({
       name,
@@ -78,7 +98,9 @@ export const createPipeline = async (req, res) => {
       deploymentTarget: deploymentTarget || "cloudflare",
       cloudAccount: resolvedCloudAccount,
       ec2InstanceId: ec2InstanceId || "",
-      appPort: appPort || 3000,
+      appPort: resolvedPort,
+      containerPort: resolvedPort,
+      envVars: cleanEnvVars,
       s3BucketName: s3BucketName || "",
       cloudflareProjectName: cloudflareProjectName || "",
       createdBy: req.user._id,
@@ -173,6 +195,8 @@ export const updatePipeline = async (req, res) => {
       cloudAccount,
       ec2InstanceId,
       appPort,
+      containerPort,
+      envVars,
       s3BucketName,
       cloudflareProjectName,
       status,
@@ -200,7 +224,17 @@ export const updatePipeline = async (req, res) => {
       pipeline.cloudAccount = (cloudAccount && cloudAccount !== "") ? cloudAccount : null;
     }
     pipeline.ec2InstanceId = ec2InstanceId !== undefined ? ec2InstanceId : pipeline.ec2InstanceId;
-    pipeline.appPort = appPort !== undefined ? appPort : pipeline.appPort;
+    if (appPort !== undefined) pipeline.appPort = Number(appPort) || 5000;
+    if (containerPort !== undefined) pipeline.containerPort = Number(containerPort) || 5000;
+    if (envVars !== undefined && Array.isArray(envVars)) {
+      pipeline.envVars = envVars
+        .filter((v) => v && v.key && String(v.key).trim() !== "")
+        .map((v) => ({
+          key: String(v.key).trim(),
+          value: v.value !== undefined ? String(v.value) : "",
+          isSecret: !!v.isSecret,
+        }));
+    }
     pipeline.s3BucketName = s3BucketName !== undefined ? s3BucketName : pipeline.s3BucketName;
     pipeline.cloudflareProjectName =
       cloudflareProjectName !== undefined ? cloudflareProjectName : pipeline.cloudflareProjectName;
@@ -459,13 +493,210 @@ export const executePipelineJob = async (pipelineId) => {
         }
         await pipeline.save();
       } else if (pipeline.deploymentTarget === "docker") {
-        const imageName = `${repository.name.toLowerCase().replace(/\s+/g, "-")}:latest`;
-        try {
-          dockerLogs = await buildDockerImage(projectPath, imageName, pipeline.dockerfilePath, onLog);
-        } catch (dockerError) {
-          logger.warn("⚠️ Docker build failed (Docker may not be running):", dockerError.message || dockerError);
-          dockerLogs = `Docker build skipped: ${dockerError.message || "Docker daemon not available"}`;
-          onLog(`[ERROR] Docker build failed: ${dockerError.message || "Daemon not available"}`);
+        onLog(`[DEPLOY] Starting Docker Container Deployment for backend application...`);
+        const targetPort = pipeline.containerPort || pipeline.appPort || 5000;
+        const envVars = pipeline.envVars || [];
+
+        // 1. Ensure Dockerfile exists locally or auto-generate
+        const { content: dockerfileContent } = ensureDockerfile(
+          projectPath,
+          pipeline.dockerfilePath || "./Dockerfile",
+          targetPort,
+          onLog
+        );
+
+        // Check if user has an EC2 instance or AWS account configured to run Docker remotely
+        let resolvedCloudAccount = null;
+        if (pipeline.cloudAccount) {
+          resolvedCloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+        }
+        if (!resolvedCloudAccount) {
+          if (pipeline.createdBy) {
+            resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS", owner: pipeline.createdBy }).sort({ updatedAt: -1 });
+          }
+          if (!resolvedCloudAccount) {
+            resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS" }).sort({ updatedAt: -1 });
+          }
+          if (resolvedCloudAccount && (pipeline.cloudAccount || pipeline.ec2InstanceId)) {
+            pipeline.cloudAccount = resolvedCloudAccount._id;
+            await pipeline.save();
+          }
+        }
+
+        const hasEc2Config = !!(pipeline.ec2InstanceId || (resolvedCloudAccount && pipeline.ec2InstanceId));
+
+        if (hasEc2Config) {
+          onLog(`[DEPLOY] Target: AWS EC2 Docker Host (Instance: ${pipeline.ec2InstanceId})...`);
+
+          let publicIp = null;
+          let ec2Client = null;
+          let instanceInfo = null;
+
+          if (resolvedCloudAccount && resolvedCloudAccount.provider === "AWS" && pipeline.ec2InstanceId) {
+            try {
+              ec2Client = new EC2Client({
+                region: resolvedCloudAccount.region || "ap-south-1",
+                credentials: {
+                  accessKeyId: resolvedCloudAccount.accessKeyId,
+                  secretAccessKey: resolvedCloudAccount.secretAccessKey,
+                },
+              });
+              const data = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+              instanceInfo = data.Reservations?.[0]?.Instances?.[0];
+
+              if (instanceInfo?.State?.Name === "stopped") {
+                onLog(`[DEPLOY] EC2 instance is currently STOPPED. Auto-starting instance...`);
+                await ec2Client.send(new StartInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+                for (let poll = 0; poll < 6; poll++) {
+                  await new Promise((r) => setTimeout(r, 6000));
+                  const pollRes = await ec2Client.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+                  const refreshed = pollRes.Reservations?.[0]?.Instances?.[0];
+                  if (refreshed?.PublicIpAddress && refreshed?.State?.Name === "running") {
+                    publicIp = refreshed.PublicIpAddress;
+                    break;
+                  }
+                }
+              } else if (instanceInfo?.PublicIpAddress) {
+                publicIp = instanceInfo.PublicIpAddress;
+              }
+            } catch (ec2Err) {
+              onLog(`[WARN] Could not query EC2: ${ec2Err.message}`);
+            }
+          }
+
+          if (publicIp && ec2Client && instanceInfo) {
+            try {
+              const sgId = instanceInfo.SecurityGroups?.[0]?.GroupId;
+              if (sgId) {
+                onLog(`[DEPLOY] Verifying port ${targetPort} is open in AWS Security Group (${sgId})...`);
+                await ec2Client.send(new AuthorizeSecurityGroupIngressCommand({
+                  GroupId: sgId,
+                  IpPermissions: [{
+                    IpProtocol: "tcp", FromPort: targetPort, ToPort: targetPort,
+                    IpRanges: [{ CidrIp: "0.0.0.0/0" }]
+                  }]
+                }));
+                onLog(`[DEPLOY] Security Group ingress for port ${targetPort} verified ✓`);
+              }
+            } catch (sgErr) {
+              if (sgErr.name === "InvalidPermission.Duplicate") {
+                onLog(`[DEPLOY] Port ${targetPort} is already open in Security Group ✓`);
+              } else {
+                onLog(`[WARN] Security Group rule check: ${sgErr.message}`);
+              }
+            }
+          }
+
+          // SSH Connection
+          const ssh = new NodeSSH();
+          let rawSshKey = process.env.EC2_SSH_KEY;
+          const sshKeyPath = process.env.EC2_SSH_KEY_PATH;
+
+          if (rawSshKey) {
+            rawSshKey = rawSshKey.trim();
+            if ((rawSshKey.startsWith('"') && rawSshKey.endsWith('"')) || (rawSshKey.startsWith("'") && rawSshKey.endsWith("'"))) {
+              rawSshKey = rawSshKey.slice(1, -1);
+            }
+            rawSshKey = rawSshKey.replace(/\r\n/g, "\n").replace(/\\n/g, "\n").trim();
+          }
+
+          let resolvedKeyPath = (sshKeyPath && fs.existsSync(sshKeyPath)) ? sshKeyPath : undefined;
+          if (!resolvedKeyPath && !rawSshKey) {
+            const commonPaths = ["/etc/secrets/cloud.pem", "/etc/secrets/key.pem", "/etc/secrets/id_rsa", "./cloud.pem", "./id_rsa"];
+            for (const p of commonPaths) {
+              if (fs.existsSync(p)) { resolvedKeyPath = p; break; }
+            }
+          }
+
+          const targetHost = publicIp || (instanceInfo && instanceInfo.PublicIpAddress);
+          if (!targetHost) {
+            throw new Error(`Failed to resolve EC2 Public IP for instance "${pipeline.ec2InstanceId}". Cannot connect via SSH.`);
+          }
+
+          const usernamesToTry = [process.env.EC2_USERNAME, "ubuntu", "ec2-user", "admin"].filter(Boolean);
+          let connected = false;
+          let sshUsername = "";
+
+          for (const u of [...new Set(usernamesToTry)]) {
+            try {
+              onLog(`[DEPLOY] Connecting via SSH to ${targetHost} as "${u}"...`);
+              await ssh.connect({
+                host: targetHost,
+                username: u,
+                readyTimeout: 20000,
+                ...(rawSshKey ? { privateKey: rawSshKey } : { privateKeyPath: resolvedKeyPath }),
+              });
+              connected = true;
+              sshUsername = u;
+              onLog(`[DEPLOY] SSH connection established with ${u} ✓`);
+              break;
+            } catch (err) {
+              onLog(`[DEPLOY] SSH attempt with "${u}" failed: ${err.message}`);
+            }
+          }
+
+          if (!connected) {
+            throw new Error(`Could not connect via SSH to EC2 host ${targetHost}. Please verify SSH Key.`);
+          }
+
+          try {
+            const repoName = repository.name.replace(/\s+/g, "-");
+            const targetDir = `/home/${sshUsername}/${repoName}`;
+
+            onLog(`[DEPLOY] Syncing repository to EC2...`);
+            const checkDir = await ssh.execCommand(`[ -d "${targetDir}" ] && echo "exists" || echo "missing"`, { cwd: `/home/${sshUsername}` });
+            if (checkDir.stdout.trim() === "exists") {
+              await ssh.execCommand(`cd ${targetDir} && git pull`, { cwd: `/home/${sshUsername}` });
+            } else {
+              await ssh.execCommand(`git clone ${repository.githubUrl} ${repoName}`, { cwd: `/home/${sshUsername}` });
+            }
+
+            const remoteResult = await deployDockerRemoteSSH({
+              ssh,
+              sshUsername,
+              repoName,
+              targetDir,
+              port: targetPort,
+              envVars,
+              dockerfileContent,
+              onLog,
+            });
+
+            pipeline.deployedUrl = `http://${targetHost}:${targetPort}`;
+            pipeline.containerPort = targetPort;
+            pipeline.containerId = remoteResult.containerId;
+            await pipeline.save();
+
+            onLog(`[DEPLOY] ====================================================`);
+            onLog(`[DEPLOY] 🎉 EC2 DOCKER BACKEND CONTAINER LIVE!`);
+            onLog(`[DEPLOY] Public API URL: ${pipeline.deployedUrl}`);
+            onLog(`[DEPLOY] ====================================================`);
+          } finally {
+            ssh.dispose();
+          }
+        } else {
+          // Local Docker Daemon Deployment
+          onLog(`[DEPLOY] Target: Local Docker Daemon...`);
+          try {
+            const localResult = await deployDockerLocal({
+              projectPath,
+              repoName: repository.name,
+              dockerfilePath: pipeline.dockerfilePath,
+              port: targetPort,
+              envVars,
+              onLog,
+            });
+
+            pipeline.deployedUrl = localResult.deployedUrl;
+            pipeline.containerPort = targetPort;
+            pipeline.containerId = localResult.containerId;
+            await pipeline.save();
+          } catch (localDockerErr) {
+            onLog(`[ERROR] Docker deployment failed: ${localDockerErr.message}`);
+            onLog(`[HINT] 1. If running locally, make sure Docker Desktop / daemon is started.`);
+            onLog(`[HINT] 2. If deploying to cloud, select an AWS Account and EC2 Instance in pipeline settings.`);
+            throw localDockerErr;
+          }
         }
       } else {
          onLog(`[DEPLOY] Starting real SSH deployment to EC2...`);

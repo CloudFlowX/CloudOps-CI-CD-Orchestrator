@@ -8,6 +8,8 @@ import {
   Search,
   RotateCcw,
   Eye,
+  EyeOff,
+  Lock,
   XCircle,
   CheckCircle2,
   RefreshCw,
@@ -165,6 +167,8 @@ export default function PipelinesPage() {
           deploymentTarget: p.deploymentTarget || 'cloudflare',
           buildCommand: p.buildCommand || 'npm run build',
           deployedUrl: p.deployedUrl || '',
+          containerPort: p.containerPort || p.appPort || 5000,
+          envVars: p.envVars || [],
           cloudAccount: p.cloudAccount?._id || p.cloudAccount || '',
           ec2InstanceId: p.ec2InstanceId || '',
           appPort: p.appPort || 3000,
@@ -216,9 +220,108 @@ export default function PipelinesPage() {
     cloudAccount: '',
     ec2InstanceId: '',
     appPort: 3000,
+    containerPort: 5000,
+    envVars: [{ key: 'PORT', value: '5000', isSecret: false, showVal: false }],
     s3BucketName: '',
     cloudflareProjectName: ''
   });
+
+  // Bulk .env Paste Modal State
+  const [isEnvPasteModalOpen, setIsEnvPasteModalOpen] = useState(false);
+  const [rawEnvText, setRawEnvText] = useState('');
+  const [envPasteTarget, setEnvPasteTarget] = useState('new');
+
+  const handleAddEnvVar = (target = 'new') => {
+    if (target === 'new') {
+      setNewPipeline(prev => ({
+        ...prev,
+        envVars: [...(prev.envVars || []), { key: '', value: '', isSecret: false, showVal: false }]
+      }));
+    } else {
+      setEditPipeline(prev => ({
+        ...prev,
+        envVars: [...(prev.envVars || []), { key: '', value: '', isSecret: false, showVal: false }]
+      }));
+    }
+  };
+
+  const handleUpdateEnvVar = (index, field, val, target = 'new') => {
+    if (target === 'new') {
+      setNewPipeline(prev => {
+        const next = [...(prev.envVars || [])];
+        next[index] = { ...next[index], [field]: val };
+        return { ...prev, envVars: next };
+      });
+    } else {
+      setEditPipeline(prev => {
+        const next = [...(prev.envVars || [])];
+        next[index] = { ...next[index], [field]: val };
+        return { ...prev, envVars: next };
+      });
+    }
+  };
+
+  const handleRemoveEnvVar = (index, target = 'new') => {
+    if (target === 'new') {
+      setNewPipeline(prev => {
+        const next = (prev.envVars || []).filter((_, i) => i !== index);
+        return { ...prev, envVars: next };
+      });
+    } else {
+      setEditPipeline(prev => {
+        const next = (prev.envVars || []).filter((_, i) => i !== index);
+        return { ...prev, envVars: next };
+      });
+    }
+  };
+
+  const handleOpenEnvPaste = (target = 'new') => {
+    setEnvPasteTarget(target);
+    setRawEnvText('');
+    setIsEnvPasteModalOpen(true);
+  };
+
+  const handleImportRawEnv = () => {
+    if (!rawEnvText.trim()) {
+      setIsEnvPasteModalOpen(false);
+      return;
+    }
+    const lines = rawEnvText.split('\n');
+    const parsed = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx !== -1) {
+        const key = trimmed.slice(0, eqIdx).trim().replace(/[^a-zA-Z0-9_]/g, '');
+        let val = trimmed.slice(eqIdx + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        if (key) {
+          const isSecret = /secret|key|password|token|jwt|mongo|auth|cred|database_url/i.test(key);
+          parsed.push({ key, value: val, isSecret, showVal: false });
+        }
+      }
+    }
+    if (parsed.length > 0) {
+      if (envPasteTarget === 'new') {
+        setNewPipeline(prev => ({
+          ...prev,
+          envVars: [...(prev.envVars || []).filter(v => v && v.key && v.key.trim()), ...parsed]
+        }));
+      } else {
+        setEditPipeline(prev => ({
+          ...prev,
+          envVars: [...(prev.envVars || []).filter(v => v && v.key && v.key.trim()), ...parsed]
+        }));
+      }
+      showToast(`Imported ${parsed.length} environment variables!`, 'success');
+    } else {
+      showToast('No valid KEY=VALUE lines found.', 'warning');
+    }
+    setIsEnvPasteModalOpen(false);
+  };
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -423,8 +526,12 @@ export default function PipelinesPage() {
         environment: newPipeline.environment,
         deploymentTarget: newPipeline.deploymentTarget,
         cloudAccount: newPipeline.cloudAccount,
-        ec2InstanceId: newPipeline.deploymentTarget === 'aws' ? newPipeline.ec2InstanceId?.trim() : '',
+        ec2InstanceId: (newPipeline.deploymentTarget === 'aws' || newPipeline.deploymentTarget === 'docker') ? newPipeline.ec2InstanceId?.trim() : '',
         appPort: newPipeline.deploymentTarget === 'aws' ? newPipeline.appPort : undefined,
+        containerPort: newPipeline.deploymentTarget === 'docker' ? (Number(newPipeline.containerPort) || 5000) : undefined,
+        envVars: (newPipeline.deploymentTarget === 'docker' || newPipeline.deploymentTarget === 'aws')
+          ? (newPipeline.envVars || []).filter(v => v && v.key && v.key.trim() !== '')
+          : [],
         s3BucketName: newPipeline.s3BucketName?.trim(),
         cloudflareProjectName: newPipeline.cloudflareProjectName?.trim()
       };
@@ -443,6 +550,8 @@ export default function PipelinesPage() {
           cloudAccount: '',
           ec2InstanceId: '',
           appPort: 3000,
+          containerPort: 5000,
+          envVars: [{ key: 'PORT', value: '5000', isSecret: false, showVal: false }],
           s3BucketName: '',
           cloudflareProjectName: ''
         });
@@ -469,8 +578,12 @@ export default function PipelinesPage() {
         environment: editPipeline.environment,
         deploymentTarget: editPipeline.deploymentTarget,
         cloudAccount: editPipeline.cloudAccount,
-        ec2InstanceId: editPipeline.deploymentTarget === 'aws' ? editPipeline.ec2InstanceId?.trim() : '',
+        ec2InstanceId: (editPipeline.deploymentTarget === 'aws' || editPipeline.deploymentTarget === 'docker') ? editPipeline.ec2InstanceId?.trim() : '',
         appPort: editPipeline.deploymentTarget === 'aws' ? editPipeline.appPort : undefined,
+        containerPort: editPipeline.deploymentTarget === 'docker' ? (Number(editPipeline.containerPort) || 5000) : undefined,
+        envVars: (editPipeline.deploymentTarget === 'docker' || editPipeline.deploymentTarget === 'aws')
+          ? (editPipeline.envVars || []).filter(v => v && v.key && v.key.trim() !== '')
+          : [],
         s3BucketName: editPipeline.s3BucketName?.trim(),
         cloudflareProjectName: editPipeline.cloudflareProjectName?.trim()
       };
@@ -521,9 +634,104 @@ export default function PipelinesPage() {
     e?.stopPropagation();
     setEditPipeline({
       ...pipeline,
-      repository: pipeline.repository || '',
+      id: pipeline.id || pipeline._id,
+      containerPort: pipeline.containerPort || pipeline.appPort || 5000,
+      envVars: Array.isArray(pipeline.envVars) && pipeline.envVars.length > 0
+        ? pipeline.envVars.map(v => ({ key: v.key || '', value: v.value || '', isSecret: !!v.isSecret, showVal: false }))
+        : [{ key: 'PORT', value: '5000', isSecret: false, showVal: false }],
+      repository: pipeline.repository?._id || pipeline.repository || '',
     });
     setIsEditModalOpen(true);
+  };
+
+  const renderEnvVarsEditor = (pipelineObj, target = 'new') => {
+    const envVars = pipelineObj.envVars || [];
+    return (
+      <div className="env-vars-wrapper">
+        <div className="env-vars-header">
+          <div>
+            <span className="env-vars-title">Environment Variables (.env)</span>
+            <span className="env-vars-subtitle">
+              Injected into backend container via <code>--env-file</code>
+            </span>
+          </div>
+          <div className="env-vars-header-actions">
+            <button
+              type="button"
+              className="btn-env-action btn-paste-env"
+              onClick={() => handleOpenEnvPaste(target)}
+            >
+              <Copy size={13} />
+              Paste .env
+            </button>
+            <button
+              type="button"
+              className="btn-env-action btn-add-env"
+              onClick={() => handleAddEnvVar(target)}
+            >
+              <Plus size={13} />
+              Add Variable
+            </button>
+          </div>
+        </div>
+
+        {envVars.length === 0 ? (
+          <div className="env-vars-empty" onClick={() => handleAddEnvVar(target)}>
+            No environment variables configured. Click "+ Add Variable" or "Paste .env" to inject variables like PORT, MONGO_URI, JWT_SECRET.
+          </div>
+        ) : (
+          <div className="env-vars-list">
+            {envVars.map((item, idx) => (
+              <div key={idx} className="env-var-row">
+                <input
+                  type="text"
+                  className="env-key-input"
+                  placeholder="KEY (e.g. PORT)"
+                  value={item.key || ''}
+                  onChange={(e) => handleUpdateEnvVar(idx, 'key', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''), target)}
+                />
+                <span className="env-separator">=</span>
+                <div className="env-value-wrapper">
+                  <input
+                    type={item.isSecret && !item.showVal ? 'password' : 'text'}
+                    className="env-value-input"
+                    placeholder="VALUE (e.g. 5000)"
+                    value={item.value || ''}
+                    onChange={(e) => handleUpdateEnvVar(idx, 'value', e.target.value, target)}
+                  />
+                  {item.isSecret && (
+                    <button
+                      type="button"
+                      className="env-show-toggle"
+                      onClick={() => handleUpdateEnvVar(idx, 'showVal', !item.showVal, target)}
+                      title={item.showVal ? 'Hide value' : 'Show value'}
+                    >
+                      {item.showVal ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className={`btn-env-secret-toggle ${item.isSecret ? 'active' : ''}`}
+                  onClick={() => handleUpdateEnvVar(idx, 'isSecret', !item.isSecret, target)}
+                  title={item.isSecret ? 'Secret variable (masked)' : 'Plain text variable'}
+                >
+                  <Lock size={13} />
+                </button>
+                <button
+                  type="button"
+                  className="btn-env-delete"
+                  onClick={() => handleRemoveEnvVar(idx, target)}
+                  title="Remove variable"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const renderStatusBadge = (status) => {
@@ -883,6 +1091,11 @@ export default function PipelinesPage() {
                               S3 + CDN
                             </span>
                           )}
+                          {pipeline.deploymentTarget === 'docker' && (
+                            <span style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                              🐳 Docker API
+                            </span>
+                          )}
                         </div>
                         <div className="commit-preview">
                           <code className="commit-hash">{pipeline.commitHash}</code>
@@ -895,7 +1108,7 @@ export default function PipelinesPage() {
                               onClick={(e) => e.stopPropagation()}
                               style={{ color: '#4ade80', fontSize: '11px', textDecoration: 'none', marginLeft: '8px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: '600' }}
                             >
-                              Live App ↗
+                              {pipeline.deploymentTarget === 'docker' ? 'Live API ↗' : 'Live App ↗'}
                             </a>
                           )}
                         </div>
@@ -1448,8 +1661,11 @@ export default function PipelinesPage() {
                         }}
                       />
                       <div className="radio-content">
-                        <span className="radio-title">Docker + ECR + EC2</span>
-                        <span className="radio-desc">Dockerfile: Required</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="radio-title">Docker Backend Container</span>
+                          <span style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Backend API • Auto-Dockerfile</span>
+                        </div>
+                        <span className="radio-desc">Node.js, Python, or Go • Auto-generates Dockerfile • Injects .env Secrets</span>
                       </div>
                     </label>
                   </div>
@@ -1518,17 +1734,86 @@ export default function PipelinesPage() {
                 )}
 
                 {newPipeline.deploymentTarget === 'docker' && (
-                  <div className="form-group">
-                    <label className="form-label">Dockerfile Path</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={newPipeline.dockerfilePath}
-                      onChange={(e) =>
-                        setNewPipeline({ ...newPipeline, dockerfilePath: e.target.value })
-                      }
-                      required
-                    />
+                  <div className="docker-config-section">
+                    <div className="docker-auto-banner">
+                      <div className="docker-banner-icon">⚡</div>
+                      <div className="docker-banner-text">
+                        <strong>Auto-Dockerfile Engine Active:</strong> If your repository doesn't have a <code>Dockerfile</code>, CloudOps will auto-detect your project (Node.js, Express, Python, Flask, FastAPI, Django, Go) and generate a production Dockerfile automatically!
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group flex-1">
+                        <label className="form-label">Container API Port</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder="5000"
+                          value={newPipeline.containerPort || 5000}
+                          onChange={(e) =>
+                            setNewPipeline({ ...newPipeline, containerPort: e.target.value })
+                          }
+                          required
+                        />
+                        <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                          Port mapped to container (e.g. 5000, 3000, 8000)
+                        </span>
+                      </div>
+                      <div className="form-group flex-1">
+                        <label className="form-label">Dockerfile Path</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={newPipeline.dockerfilePath || './Dockerfile'}
+                          onChange={(e) =>
+                            setNewPipeline({ ...newPipeline, dockerfilePath: e.target.value })
+                          }
+                          placeholder="./Dockerfile"
+                          required
+                        />
+                        <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                          Auto-generated if missing in repository
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Deployment Host (Optional)</label>
+                      <select
+                        className="form-select"
+                        value={newPipeline.cloudAccount || ''}
+                        onChange={(e) =>
+                          setNewPipeline({ ...newPipeline, cloudAccount: e.target.value })
+                        }
+                      >
+                        <option value="">⚡ Local Docker Daemon (Runs on host machine)</option>
+                        {availableCloudAccounts.map((acc, idx) => (
+                          <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>
+                            ☁️ AWS EC2 Host: {acc.accountName} ({acc.region || acc.environment})
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        Run container locally or select AWS EC2 to deploy remotely in the cloud.
+                      </span>
+                    </div>
+
+                    {newPipeline.cloudAccount && (
+                      <div className="form-group">
+                        <label className="form-label">EC2 Instance ID</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. i-0d7303a65e207bcc9"
+                          value={newPipeline.ec2InstanceId || ''}
+                          onChange={(e) =>
+                            setNewPipeline({ ...newPipeline, ec2InstanceId: e.target.value })
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {renderEnvVarsEditor(newPipeline, 'new')}
                   </div>
                 )}
 
@@ -1746,8 +2031,11 @@ export default function PipelinesPage() {
                         }}
                       />
                       <div className="radio-content">
-                        <span className="radio-title">Docker + ECR + EC2</span>
-                        <span className="radio-desc">Dockerfile: Required</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="radio-title">Docker Backend Container</span>
+                          <span style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Backend API • Auto-Dockerfile</span>
+                        </div>
+                        <span className="radio-desc">Node.js, Python, or Go • Auto-generates Dockerfile • Injects .env Secrets</span>
                       </div>
                     </label>
                   </div>
@@ -1816,17 +2104,86 @@ export default function PipelinesPage() {
                 )}
 
                 {editPipeline.deploymentTarget === 'docker' && (
-                  <div className="form-group">
-                    <label className="form-label">Dockerfile Path</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={editPipeline.dockerfilePath || ''}
-                      onChange={(e) =>
-                        setEditPipeline({ ...editPipeline, dockerfilePath: e.target.value })
-                      }
-                      required
-                    />
+                  <div className="docker-config-section">
+                    <div className="docker-auto-banner">
+                      <div className="docker-banner-icon">⚡</div>
+                      <div className="docker-banner-text">
+                        <strong>Auto-Dockerfile Engine Active:</strong> If your repository doesn't have a <code>Dockerfile</code>, CloudOps will auto-detect your project (Node.js, Express, Python, Flask, FastAPI, Django, Go) and generate a production Dockerfile automatically!
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group flex-1">
+                        <label className="form-label">Container API Port</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder="5000"
+                          value={editPipeline.containerPort || 5000}
+                          onChange={(e) =>
+                            setEditPipeline({ ...editPipeline, containerPort: e.target.value })
+                          }
+                          required
+                        />
+                        <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                          Port mapped to container (e.g. 5000, 3000, 8000)
+                        </span>
+                      </div>
+                      <div className="form-group flex-1">
+                        <label className="form-label">Dockerfile Path</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={editPipeline.dockerfilePath || './Dockerfile'}
+                          onChange={(e) =>
+                            setEditPipeline({ ...editPipeline, dockerfilePath: e.target.value })
+                          }
+                          placeholder="./Dockerfile"
+                          required
+                        />
+                        <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                          Auto-generated if missing in repository
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Deployment Host (Optional)</label>
+                      <select
+                        className="form-select"
+                        value={editPipeline.cloudAccount || ''}
+                        onChange={(e) =>
+                          setEditPipeline({ ...editPipeline, cloudAccount: e.target.value })
+                        }
+                      >
+                        <option value="">⚡ Local Docker Daemon (Runs on host machine)</option>
+                        {availableCloudAccounts.map((acc, idx) => (
+                          <option key={acc._id || acc.id || idx} value={acc._id || acc.id}>
+                            ☁️ AWS EC2 Host: {acc.accountName} ({acc.region || acc.environment})
+                          </option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        Run container locally or select AWS EC2 to deploy remotely in the cloud.
+                      </span>
+                    </div>
+
+                    {editPipeline.cloudAccount && (
+                      <div className="form-group">
+                        <label className="form-label">EC2 Instance ID</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="e.g. i-0d7303a65e207bcc9"
+                          value={editPipeline.ec2InstanceId || ''}
+                          onChange={(e) =>
+                            setEditPipeline({ ...editPipeline, ec2InstanceId: e.target.value })
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {renderEnvVarsEditor(editPipeline, 'edit')}
                   </div>
                 )}
 
@@ -1954,6 +2311,51 @@ jobs:
               }}>
                 <Copy size={16} />
                 Copy to Clipboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk .env Paste Modal */}
+      {isEnvPasteModalOpen && (
+        <div className="modal-backdrop" style={{ zIndex: 1200 }} onClick={() => setIsEnvPasteModalOpen(false)}>
+          <div className="modal-container env-paste-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <h3 className="modal-title">📋 Bulk Import Environment Variables</h3>
+                <p className="modal-subtitle">
+                  Paste the contents of your <code>.env</code> file below. Empty lines and comments (<code>#</code>) will be filtered automatically.
+                </p>
+              </div>
+              <button className="btn-close-modal" onClick={() => setIsEnvPasteModalOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <textarea
+                className="env-paste-textarea"
+                rows={10}
+                placeholder={`PORT=5000\nMONGODB_URI=mongodb+srv://...\nJWT_SECRET=super_secret_key\nNODE_ENV=production`}
+                value={rawEnvText}
+                onChange={(e) => setRawEnvText(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsEnvPasteModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleImportRawEnv}
+              >
+                Import Variables
               </button>
             </div>
           </div>
