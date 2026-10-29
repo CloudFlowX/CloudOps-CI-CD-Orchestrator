@@ -54,7 +54,7 @@ export default function CloudAccountsPage() {
     // AWS
     accessKeyId: "",
     secretAccessKey: "",
-    region: "",
+    region: "ap-south-1",
     // GCP
     gcpProjectId: "",
     gcpClientEmail: "",
@@ -122,7 +122,7 @@ export default function CloudAccountsPage() {
           environment: "Development",
           accessKeyId: "",
           secretAccessKey: "",
-          region: "",
+          region: "ap-south-1",
           gcpProjectId: "",
           gcpClientEmail: "",
           gcpPrivateKey: "",
@@ -371,15 +371,26 @@ export default function CloudAccountsPage() {
                     </div>
                     <div className="form-group">
                       <label>Region *</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. us-east-1"
-                        value={newAccount.region}
+                      <select
+                        value={newAccount.region || "ap-south-1"}
                         onChange={(e) => setNewAccount({ ...newAccount, region: e.target.value })}
                         required={newAccount.provider === "AWS"}
                         disabled={isConnecting}
                         className="input-field"
-                      />
+                      >
+                        <option value="ap-south-1">Asia Pacific (Mumbai) — ap-south-1</option>
+                        <option value="us-east-1">US East (N. Virginia) — us-east-1</option>
+                        <option value="us-east-2">US East (Ohio) — us-east-2</option>
+                        <option value="us-west-1">US West (N. California) — us-west-1</option>
+                        <option value="us-west-2">US West (Oregon) — us-west-2</option>
+                        <option value="ap-southeast-1">Asia Pacific (Singapore) — ap-southeast-1</option>
+                        <option value="ap-northeast-1">Asia Pacific (Tokyo) — ap-northeast-1</option>
+                        <option value="eu-central-1">Europe (Frankfurt) — eu-central-1</option>
+                        <option value="eu-west-1">Europe (Ireland) — eu-west-1</option>
+                      </select>
+                      <small className="help-text" style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                        💡 Select the region where your EC2 instance or S3 bucket is created.
+                      </small>
                     </div>
                   </div>
 
