@@ -333,38 +333,52 @@ export const deployDockerRemoteSSH = async ({
   }
 
   const containerId = (runResult.stdout || "").trim().substring(0, 12);
-  onLog(`[DOCKER] Container created on EC2 (ID: ${containerId}). Verifying startup health...`);
+  onLog(`[DOCKER] Container created on EC2 (ID: ${containerId}). Waiting 4s to verify runtime stability...`);
 
-  // Wait 3 seconds to verify container actually stays up and didn't crash on startup
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  // Wait 4 seconds to verify container actually stays up and doesn't crash on startup
+  await new Promise((resolve) => setTimeout(resolve, 4000));
 
+  // ALWAYS fetch container logs so user sees what their backend is doing
+  const containerLogs = await ssh.execCommand(`sudo docker logs --tail 40 ${containerName}`, { cwd: targetDir });
+  if (containerLogs.stdout && containerLogs.stdout.trim()) {
+    onLog(`[APP OUTPUT] Application stdout:`);
+    containerLogs.stdout.trim().split("\n").forEach((line) => onLog(`[APP] ${line}`));
+  }
+  if (containerLogs.stderr && containerLogs.stderr.trim()) {
+    onLog(`[APP OUTPUT] Application stderr:`);
+    containerLogs.stderr.trim().split("\n").forEach((line) => onLog(`[APP ERROR] ${line}`));
+  }
+
+  // Inspect container state
   const postCheck = await ssh.execCommand(
-    `sudo docker inspect --format="{{.State.Status}} {{.State.ExitCode}}" ${containerName}`,
+    `sudo docker inspect --format="{{.State.Status}} {{.State.Running}} {{.State.ExitCode}}" ${containerName}`,
     { cwd: targetDir }
   );
   const statusParts = (postCheck.stdout || "").trim().split(" ");
   const currentStatus = statusParts[0];
-  const exitCode = statusParts[1];
+  const isRunning = statusParts[1];
+  const exitCode = statusParts[2];
 
-  if (currentStatus === "exited" || (exitCode && exitCode !== "0")) {
-    const errorLogs = await ssh.execCommand(`sudo docker logs --tail 30 ${containerName}`, { cwd: targetDir });
+  const psCheck = await ssh.execCommand(`sudo docker ps --filter "name=${containerName}" --format "{{.Status}}"`, { cwd: targetDir });
+  const psStatus = (psCheck.stdout || "").trim();
+
+  const isFailing = currentStatus === "exited" || currentStatus === "restarting" || isRunning !== "true" || psStatus.toLowerCase().includes("restart");
+
+  if (isFailing) {
     onLog(`[ERROR] ====================================================`);
-    onLog(`[ERROR] 💥 CONTAINER CRASHED ON STARTUP (Exit Code: ${exitCode || "1"})`);
-    if (errorLogs.stdout) {
-      errorLogs.stdout.split("\n").filter(Boolean).forEach((line) => onLog(`[CRASH LOG] ${line}`));
-    }
-    if (errorLogs.stderr) {
-      errorLogs.stderr.split("\n").filter(Boolean).forEach((line) => onLog(`[CRASH LOG] ${line}`));
-    }
-    onLog(`[HINT] 1. Your backend likely requires environment variables (e.g. MONGO_URI, JWT_SECRET, DB_URL).`);
-    onLog(`[HINT] 2. Go to Pipelines -> Edit -> Environment Variables (.env) -> Add required keys -> Rerun.`);
+    onLog(`[ERROR] 💥 CONTAINER FAILED TO STAY RUNNING!`);
+    onLog(`[ERROR] Status: "${currentStatus}" • Docker PS: "${psStatus}" • Exit Code: ${exitCode || "1"}`);
+    onLog(`[ERROR] Check the [APP ERROR] logs printed above for the exact reason.`);
+    onLog(`[HINT] Common causes:`);
+    onLog(`[HINT] 1. MongoDB Atlas Network Access: In Atlas -> Network Access -> Add IP Address -> Allow 0.0.0.0/0 (so AWS EC2 can connect).`);
+    onLog(`[HINT] 2. Missing or incorrect Environment Variables (.env).`);
     onLog(`[ERROR] ====================================================`);
     throw new Error(
-      `Container started but crashed on startup (Exit code: ${exitCode || "1"}). Check [CRASH LOG] above for missing environment variables or database connection errors.`
+      `Backend container crashed on startup (Status: ${currentStatus || psStatus}, Exit code: ${exitCode || "1"}). Look at [APP ERROR] logs above for the exact failure reason.`
     );
   }
 
-  onLog(`[DOCKER] Container is healthy and active! ✓`);
+  onLog(`[DOCKER] Container is healthy, running, and accepting traffic! ✓`);
   const inspectResult = await ssh.execCommand(`sudo docker ps --filter "name=${containerName}" --format "table {{.ID}}\t{{.Status}}\t{{.Ports}}"`, { cwd: targetDir });
   if (inspectResult.stdout) {
     inspectResult.stdout.split("\n").filter(Boolean).forEach((line) => onLog(`[DOCKER] ${line}`));
