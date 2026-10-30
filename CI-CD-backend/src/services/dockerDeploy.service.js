@@ -333,8 +333,38 @@ export const deployDockerRemoteSSH = async ({
   }
 
   const containerId = (runResult.stdout || "").trim().substring(0, 12);
-  onLog(`[DOCKER] Container running on EC2! (ID: ${containerId}) ✓`);
+  onLog(`[DOCKER] Container created on EC2 (ID: ${containerId}). Verifying startup health...`);
 
+  // Wait 3 seconds to verify container actually stays up and didn't crash on startup
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+  const postCheck = await ssh.execCommand(
+    `sudo docker inspect --format="{{.State.Status}} {{.State.ExitCode}}" ${containerName}`,
+    { cwd: targetDir }
+  );
+  const statusParts = (postCheck.stdout || "").trim().split(" ");
+  const currentStatus = statusParts[0];
+  const exitCode = statusParts[1];
+
+  if (currentStatus === "exited" || (exitCode && exitCode !== "0")) {
+    const errorLogs = await ssh.execCommand(`sudo docker logs --tail 30 ${containerName}`, { cwd: targetDir });
+    onLog(`[ERROR] ====================================================`);
+    onLog(`[ERROR] 💥 CONTAINER CRASHED ON STARTUP (Exit Code: ${exitCode || "1"})`);
+    if (errorLogs.stdout) {
+      errorLogs.stdout.split("\n").filter(Boolean).forEach((line) => onLog(`[CRASH LOG] ${line}`));
+    }
+    if (errorLogs.stderr) {
+      errorLogs.stderr.split("\n").filter(Boolean).forEach((line) => onLog(`[CRASH LOG] ${line}`));
+    }
+    onLog(`[HINT] 1. Your backend likely requires environment variables (e.g. MONGO_URI, JWT_SECRET, DB_URL).`);
+    onLog(`[HINT] 2. Go to Pipelines -> Edit -> Environment Variables (.env) -> Add required keys -> Rerun.`);
+    onLog(`[ERROR] ====================================================`);
+    throw new Error(
+      `Container started but crashed on startup (Exit code: ${exitCode || "1"}). Check [CRASH LOG] above for missing environment variables or database connection errors.`
+    );
+  }
+
+  onLog(`[DOCKER] Container is healthy and active! ✓`);
   const inspectResult = await ssh.execCommand(`sudo docker ps --filter "name=${containerName}" --format "table {{.ID}}\t{{.Status}}\t{{.Ports}}"`, { cwd: targetDir });
   if (inspectResult.stdout) {
     inspectResult.stdout.split("\n").filter(Boolean).forEach((line) => onLog(`[DOCKER] ${line}`));

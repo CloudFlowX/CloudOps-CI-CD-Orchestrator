@@ -26,27 +26,21 @@ export const startHealthChecker = () => {
              } catch(e) {}
           }
         } catch (error) {
-          // If request fails, mark as offline/failed or just emit a specific event
-          // Let's just update the status to 'failed' if it was success
-          if (pipeline.status === "success") {
-             logger.warn(`Health check failed for ${pipeline.name} at ${pipeline.deployedUrl}`);
-             pipeline.status = "failed";
-             await pipeline.save();
-             try {
-                getIO().emit("pipeline_status_changed", { id: pipeline._id, status: "failed" });
-                
-                const { triggerAlert } = await import("../utils/alertHelper.js");
-                await triggerAlert({
-                  title: `Health Check Failed: ${pipeline.name}`,
-                  service: pipeline.name,
-                  message: `The deployed URL ${pipeline.deployedUrl} is unresponsive. Error: ${error.message}`,
-                  severity: "Critical",
-                  metric: "Uptime",
-                  threshold: "200 OK",
-                  currentValue: "Offline"
-                });
-             } catch(e) {}
-          }
+          // If request fails, trigger alert for monitoring, but DO NOT corrupt or overwrite
+          // the pipeline's completed CI/CD execution status ('success')!
+          logger.warn(`Service health check warning for ${pipeline.name} at ${pipeline.deployedUrl}: ${error.message}`);
+          try {
+            const { triggerAlert } = await import("../utils/alertHelper.js");
+            await triggerAlert({
+              title: `Service Health Warning: ${pipeline.name}`,
+              service: pipeline.name,
+              message: `The deployed URL ${pipeline.deployedUrl} is unresponsive or returned an error: ${error.message}`,
+              severity: "Medium",
+              metric: "Uptime",
+              threshold: "200 OK",
+              currentValue: "Unresponsive"
+            });
+          } catch (e) {}
         }
       }
     } catch (error) {
