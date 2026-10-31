@@ -9,6 +9,7 @@ import {
   Radio,
   Download,
   Maximize2,
+  Minimize2,
   ArrowDown,
   Terminal,
   AlertTriangle,
@@ -22,7 +23,8 @@ import {
   ChevronRight,
   ChevronDown,
   Layers,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react';
 
 
@@ -106,6 +108,21 @@ export default function LogsPage() {
       logTerminalRef.current.scrollTop = logTerminalRef.current.scrollHeight;
     }
   }, [filteredLogs, autoScroll]);
+
+  // Handle ESC key to exit fullscreen or dismiss log details
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (selectedLog) {
+          setSelectedLog(null);
+        } else if (isFullscreen) {
+          setIsFullscreen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedLog, isFullscreen]);
 
   const scrollToBottom = () => {
     if (logTerminalRef.current) {
@@ -320,14 +337,29 @@ export default function LogsPage() {
       </div>
 
       {/* Main Content Split: Terminal Viewer (left) + Log Details Panel (right) */}
-      <div className="logs-workspace">
+      <div className={`logs-workspace ${selectedLog ? 'has-details' : 'full-width'}`}>
         {/* 4. Terminal-style Log Viewer */}
         <div className="terminal-container">
           <div className="terminal-header-bar">
             <div className="macos-dots">
-              <span className="dot dot-red"></span>
-              <span className="dot dot-yellow"></span>
-              <span className="dot dot-green"></span>
+              <span
+                className="dot dot-red"
+                title={selectedLog ? "Close Details" : "Window Dot"}
+                onClick={() => selectedLog && setSelectedLog(null)}
+                style={{ cursor: selectedLog ? 'pointer' : 'default' }}
+              ></span>
+              <span
+                className="dot dot-yellow"
+                title="Clear Current Terminal View"
+                onClick={handleClearLogs}
+                style={{ cursor: 'pointer' }}
+              ></span>
+              <span
+                className="dot dot-green"
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Toggle Fullscreen"}
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                style={{ cursor: 'pointer' }}
+              ></span>
             </div>
 
             <div className="terminal-title">
@@ -349,6 +381,14 @@ export default function LogsPage() {
                 title="Toggle Line Wrap"
               >
                 Wrap
+              </button>
+              <button
+                className={`terminal-toggle-btn ${isFullscreen ? 'active' : ''}`}
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Expand Fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                <span>{isFullscreen ? 'Exit' : 'Full Screen'}</span>
               </button>
               <span className="log-count-badge">
                 {filteredLogs.length} entries
@@ -444,9 +484,18 @@ export default function LogsPage() {
                 <Layers size={18} className="panel-title-icon" />
                 <h3>Log Entry Details</h3>
               </div>
-              <span className={`badge level-${selectedLog.level.toLowerCase()}`}>
-                {selectedLog.level}
-              </span>
+              <div className="panel-header-actions">
+                <span className={`badge level-${selectedLog.level.toLowerCase()}`}>
+                  {selectedLog.level}
+                </span>
+                <button
+                  className="panel-close-btn"
+                  onClick={() => setSelectedLog(null)}
+                  title="Close Details (Expand Terminal to Full Width)"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             <div className="panel-content">
