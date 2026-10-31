@@ -6,6 +6,9 @@ import {
   createEnvironment,
   getEnvVars,
   createEnvVar,
+  getPipelineVariables,
+  savePipelineVariables,
+  syncAndRestartPipeline,
 } from "../controllers/environment.controller.js";
 
 const router = express.Router();
@@ -23,5 +26,18 @@ router
   .route("/vars")
   .get(authorize("admin", "developer", "viewer"), getEnvVars)
   .post(authorize("admin", "developer"), createEnvVar);
+
+// Pipeline-specific environment variable routes
+router
+  .route("/pipeline-vars")
+  .get(authorize("admin", "developer", "viewer"), getPipelineVariables);
+
+router
+  .route("/pipeline-vars/:pipelineId")
+  .post(authorize("admin", "developer"), savePipelineVariables);
+
+router
+  .route("/sync-restart/:pipelineId")
+  .post(authorize("admin", "developer"), syncAndRestartPipeline);
 
 export default router;

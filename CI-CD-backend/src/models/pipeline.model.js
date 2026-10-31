@@ -115,6 +115,30 @@ const pipelineSchema = new mongoose.Schema(
       default: "",
     },
 
+    customDomain: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    domainStatus: {
+      type: String,
+      enum: ["none", "pending", "verified", "active", "error"],
+      default: "none",
+    },
+
+    domainDnsRecord: {
+      recordType: { type: String, default: "A" },
+      name: { type: String, default: "" },
+      value: { type: String, default: "" },
+    },
+
+    sslStatus: {
+      type: String,
+      enum: ["none", "pending", "active", "error"],
+      default: "none",
+    },
+
     logs: {
       type: [String],
       default: [],

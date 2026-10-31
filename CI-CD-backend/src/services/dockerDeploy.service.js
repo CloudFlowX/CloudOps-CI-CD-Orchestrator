@@ -426,3 +426,48 @@ export const deployDockerRemoteSSH = async ({
     port,
   };
 };
+
+/**
+ * Fast Sync .env and Restart Docker container on remote EC2 over SSH
+ */
+export const restartDockerRemoteSSH = async ({
+  ssh,
+  targetDir,
+  containerName,
+  port = 5000,
+  envVars = [],
+  onLog = () => {},
+}) => {
+  // 1. Rewrite .env file on EC2
+  const hasPortVar = envVars.some((ev) => ev.key === "PORT");
+  const finalEnvVars = hasPortVar ? envVars : [...envVars, { key: "PORT", value: String(port) }];
+  const dotEnvContent = formatDotEnvString(finalEnvVars);
+  onLog(`[DOCKER] Securing ${finalEnvVars.length} environment variables into ${targetDir}/.env...`);
+  await ssh.execCommand(`cat << 'CLOUDOPS_EOF' > ${targetDir}/.env\n${dotEnvContent}\nCLOUDOPS_EOF`, { cwd: targetDir });
+  await ssh.execCommand(`chmod 600 ${targetDir}/.env`, { cwd: targetDir });
+  onLog(`[DOCKER] Updated .env file written to host ✓`);
+
+  // 2. Restart container
+  onLog(`[DOCKER] Restarting container "${containerName}" with updated variables...`);
+  const restartRes = await ssh.execCommand(`sudo docker restart ${containerName}`, { cwd: targetDir });
+  if (restartRes.code !== 0) {
+    onLog(`[DOCKER] Container was not running. Launching container fresh...`);
+    const imageName = `${containerName}:latest`;
+    const runCmd = `sudo docker run -d --name ${containerName} --restart unless-stopped -p ${port}:${port} --env-file .env ${imageName}`;
+    await ssh.execCommand(runCmd, { cwd: targetDir });
+  }
+
+  // 3. Wait 2 seconds to check status
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const psCheck = await ssh.execCommand(`sudo docker ps --filter "name=${containerName}" --format "{{.Status}}"`, { cwd: targetDir });
+  const psStatus = (psCheck.stdout || "").trim();
+
+  const isHealthy = psStatus.toLowerCase().includes("up");
+  onLog(`[DOCKER] Container status: "${psStatus}" ${isHealthy ? "✓" : "⚠️"}`);
+
+  return {
+    success: isHealthy,
+    containerName,
+    psStatus,
+  };
+};

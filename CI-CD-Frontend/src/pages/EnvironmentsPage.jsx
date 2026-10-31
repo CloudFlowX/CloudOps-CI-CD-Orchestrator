@@ -31,158 +31,146 @@ import {
   ShieldCheck,
   Cloud,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  Zap,
+  FileText,
+  ExternalLink,
+  ArrowRight
 } from 'lucide-react';
 import './EnvironmentsPage.css';
-
 import api from '../utils/api';
 
 export default function EnvironmentsPage() {
+  const [activeTab, setActiveTab] = useState('envvars'); // 'envvars', 'dns', 'targets'
   const [environments, setEnvironments] = useState([]);
-  const [envVars, setEnvVars] = useState([]);
+  const [pipelines, setPipelines] = useState([]);
+  const [selectedPipelineId, setSelectedPipelineId] = useState('');
   const [loading, setLoading] = useState(true);
-  
+
   // Forms state
-  const [envFormData, setEnvFormData] = useState({ name: '', provider: 'AWS', region: 'us-east-1', clusterName: '' });
-  const [varFormData, setVarFormData] = useState({ key: '', value: '', scope: 'Local', masked: false, environmentId: '' });
+  const [envFormData, setEnvFormData] = useState({ name: '', provider: 'AWS', region: 'ap-south-1', clusterName: '' });
+  const [varFormData, setVarFormData] = useState({ key: '', value: '', isSecret: false, index: null });
+  const [bulkEnvText, setBulkEnvText] = useState('');
+  const [domainInput, setDomainInput] = useState('');
+  const [dnsInfo, setDnsInfo] = useState(null);
+  const [dnsVerifying, setDnsVerifying] = useState(false);
+  const [dnsResult, setDnsResult] = useState(null);
+  const [cfSettingUp, setCfSettingUp] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  
+  const [syncing, setSyncing] = useState(false);
+
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [providerFilter, setProviderFilter] = useState('All');
   const [varSearchQuery, setVarSearchQuery] = useState('');
-  const [selectedEnvFilter, setSelectedEnvFilter] = useState('All');
 
   // Secret visibility & copying
   const [visibleVars, setVisibleVars] = useState({});
   const [copiedKey, setCopiedKey] = useState(null);
 
   // Modals state
-  const [activeModal, setActiveModal] = useState(null); // 'createEnv', 'configure', 'logs', 'scale', 'editVar', 'createVar'
+  const [activeModal, setActiveModal] = useState(null); // 'createEnv', 'configure', 'logs', 'scale', 'editVar', 'createVar', 'bulkEnv'
   const [selectedModalData, setSelectedModalData] = useState(null);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState(null);
+  const [toastType, setToastType] = useState('success');
 
   const showToast = (msg, type = 'success') => {
-    // Basic toast, currently using just message, but can be expanded
     setToastMessage(msg);
+    setToastType(type);
     setTimeout(() => {
       setToastMessage(null);
-    }, 3000);
+    }, 4500);
   };
 
-  const handleCreateEnvironment = async () => {
-    if (!envFormData.name || !envFormData.region) {
-      showToast('Name and Region are required', 'error');
-      return;
-    }
-    try {
-      setSubmitting(true);
-      await api.post('/environments', envFormData);
-      showToast('Environment created successfully');
-      fetchEnvironments();
-      closeModal();
-    } catch (err) {
-      showToast(err.message || 'Failed to create environment', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleCreateVariable = async () => {
-    if (!varFormData.key || !varFormData.value || !varFormData.environmentId) {
-      showToast('Environment, Key, and Value are required', 'error');
-      return;
-    }
-    try {
-      setSubmitting(true);
-      await api.post('/environments/vars', varFormData);
-      showToast('Secret created successfully');
-      fetchEnvironments();
-      closeModal();
-    } catch (err) {
-      showToast(err.message || 'Failed to add secret', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const fetchEnvironments = async () => {
+  // Fetch initial data
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/environments');
-      const realEnvs = res.environments || [];
-      
-      const pipeRes = await api.get('/pipelines');
-      const pipelines = pipeRes.pipelines || [];
-      
-      const livePipelinesAsEnvs = pipelines
-        .filter(p => p.deployedUrl)
-        .map(p => ({
+
+      // 1. Fetch Pipelines with variables
+      const pipeRes = await api.get('/environments/pipeline-vars');
+      const realPipelines = pipeRes.pipelines || [];
+      setPipelines(realPipelines);
+
+      if (realPipelines.length > 0 && !selectedPipelineId) {
+        setSelectedPipelineId(realPipelines[0]._id);
+      }
+
+      // 2. Fetch Environments
+      const envRes = await api.get('/environments');
+      const realEnvs = envRes.environments || [];
+
+      // Map live pipelines into environments cards
+      const livePipelinesAsEnvs = realPipelines
+        .filter((p) => p.deployedUrl)
+        .map((p) => ({
           _id: p._id,
           name: p.name,
           provider: 'AWS',
           region: p.cloudAccount?.region || 'ap-south-1',
-          status: p.status === 'success' ? 'Healthy' : 'Offline',
+          status: p.status === 'success' || p.deployedUrl ? 'Healthy' : 'Offline',
           servicesCount: 1,
-          cpuUsage: Math.floor(Math.random() * 20) + 1,
-          memUsage: Math.floor(Math.random() * 40) + 20,
+          cpuUsage: Math.floor(Math.random() * 15) + 5,
+          memUsage: Math.floor(Math.random() * 30) + 20,
           lastDeployment: new Date(p.updatedAt).toLocaleString(),
           deploymentStatus: p.status,
           clusterName: p.deployedUrl,
-          instances: p.ec2InstanceId || '1 node',
-          deployedUrl: p.deployedUrl
+          instances: p.ec2InstanceId || '1 EC2 Node',
+          deployedUrl: p.deployedUrl,
+          deploymentTarget: p.deploymentTarget,
+          customDomain: p.customDomain,
         }));
 
       setEnvironments([...realEnvs, ...livePipelinesAsEnvs]);
-      
-      const varsRes = await api.get('/environments/vars');
-      setEnvVars(varsRes.envVars || []);
     } catch (err) {
       console.error(err);
-      showToast('Failed to load environments');
+      showToast('Failed to load dashboard data', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchEnvironments();
+    fetchData();
   }, []);
 
-  // Filtered environments
-  const filteredEnvironments = environments.filter((env) => {
-    const matchesSearch = env.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          env.region.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          env.provider.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'All' || env.status === statusFilter;
-    const matchesProvider = providerFilter === 'All' || env.provider === providerFilter;
-    return matchesSearch && matchesStatus && matchesProvider;
-  });
+  // Fetch DNS details when pipeline selection changes
+  const fetchDnsDetails = async (pipelineId) => {
+    if (!pipelineId) return;
+    try {
+      setDnsResult(null);
+      const res = await api.get(`/dns/${pipelineId}`);
+      if (res.success) {
+        setDnsInfo(res);
+        setDomainInput(res.customDomain || '');
+      }
+    } catch (err) {
+      console.error('DNS Fetch error:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPipelineId) {
+      fetchDnsDetails(selectedPipelineId);
+    }
+  }, [selectedPipelineId]);
+
+  // Selected Pipeline Object
+  const currentPipeline = pipelines.find((p) => p._id === selectedPipelineId) || pipelines[0] || null;
+  const currentEnvVars = currentPipeline?.envVars || [];
 
   // Filtered env vars
-  const filteredEnvVars = envVars.filter((v) => {
-    const matchesQuery = v.key.toLowerCase().includes(varSearchQuery.toLowerCase()) ||
-                         v.scope.toLowerCase().includes(varSearchQuery.toLowerCase());
-    const matchesEnv = selectedEnvFilter === 'All' || 
-                       v.scope.toLowerCase().includes(selectedEnvFilter.toLowerCase()) || 
-                       v.scope === 'Global' || 
-                       v.scope === 'All Environments';
-    return matchesQuery && matchesEnv;
+  const filteredEnvVars = currentEnvVars.filter((v) => {
+    if (!varSearchQuery) return true;
+    return v.key.toLowerCase().includes(varSearchQuery.toLowerCase());
   });
 
-  // Env stats summary
-  const totalEnvs = environments.length;
-  const healthyCount = environments.filter(e => e.status === 'Healthy').length;
-  const degradedCount = environments.filter(e => e.status === 'Degraded').length;
-  const offlineCount = environments.filter(e => e.status === 'Offline').length;
-  const totalServices = environments.reduce((sum, e) => sum + e.servicesCount, 0);
-
   // Toggle secret visibility
-  const toggleVisibility = (id) => {
-    setVisibleVars(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleVisibility = (idx) => {
+    setVisibleVars((prev) => ({ ...prev, [idx]: !prev[idx] }));
   };
 
   // Copy to clipboard helper
@@ -193,492 +181,762 @@ export default function EnvironmentsPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Handle Action Modals
+  // Modals management
   const openModal = (type, data = null) => {
     setActiveModal(type);
     setSelectedModalData(data);
+    if (type === 'createVar') {
+      setVarFormData({ key: '', value: '', isSecret: false, index: null });
+    } else if (type === 'editVar' && data) {
+      setVarFormData({ key: data.key, value: data.value, isSecret: !!data.isSecret, index: data.index });
+    } else if (type === 'bulkEnv') {
+      setBulkEnvText('');
+    }
   };
 
   const closeModal = () => {
     setActiveModal(null);
     setSelectedModalData(null);
-    // Reset forms
-    setEnvFormData({ name: '', provider: 'AWS', region: 'us-east-1', clusterName: '' });
-    setVarFormData({ key: '', value: '', scope: 'Local', masked: false, environmentId: '' });
   };
 
-  // Helper for provider badges
-  const renderProviderBadge = (provider) => {
-    let colorClass = 'provider-aws';
-    if (provider === 'Azure') colorClass = 'provider-azure';
-    if (provider === 'GCP') colorClass = 'provider-gcp';
-    return (
-      <span className={`provider-badge ${colorClass}`}>
-        <Cloud className="provider-icon" size={12} />
-        {provider}
-      </span>
-    );
-  };
-
-  // Helper for status badge
-  const renderStatusBadge = (status) => {
-    let icon = <CheckCircle2 size={13} className="status-icon green" />;
-    let statusClass = 'status-healthy';
-    if (status === 'Degraded') {
-      icon = <AlertTriangle size={13} className="status-icon yellow" />;
-      statusClass = 'status-degraded';
-    } else if (status === 'Offline') {
-      icon = <XCircle size={13} className="status-icon gray" />;
-      statusClass = 'status-offline';
+  // Save / Update Variable
+  const handleSaveVariable = async () => {
+    if (!varFormData.key || varFormData.key.trim() === '') {
+      showToast('Variable key cannot be empty', 'error');
+      return;
+    }
+    if (!currentPipeline) {
+      showToast('No pipeline selected', 'error');
+      return;
     }
 
-    return (
-      <div className={`status-pill ${statusClass}`}>
-        <span className="status-dot"></span>
-        {icon}
-        <span className="status-text">{status}</span>
-      </div>
-    );
+    try {
+      setSubmitting(true);
+      const updatedVars = [...currentEnvVars];
+      const cleanKey = varFormData.key.trim().toUpperCase().replace(/[^a-zA-Z0-9_]/g, '_');
+
+      if (varFormData.index !== null && varFormData.index !== undefined) {
+        // Edit existing
+        updatedVars[varFormData.index] = {
+          key: cleanKey,
+          value: varFormData.value,
+          isSecret: !!varFormData.isSecret,
+        };
+      } else {
+        // Add new (avoid duplicates)
+        const existingIdx = updatedVars.findIndex((v) => v.key === cleanKey);
+        if (existingIdx >= 0) {
+          updatedVars[existingIdx] = {
+            key: cleanKey,
+            value: varFormData.value,
+            isSecret: !!varFormData.isSecret,
+          };
+        } else {
+          updatedVars.push({
+            key: cleanKey,
+            value: varFormData.value,
+            isSecret: !!varFormData.isSecret,
+          });
+        }
+      }
+
+      await api.post(`/environments/pipeline-vars/${currentPipeline._id}`, { envVars: updatedVars });
+      showToast(`Variable "${cleanKey}" saved successfully! ✓`);
+      closeModal();
+      fetchData();
+    } catch (err) {
+      showToast(err.message || 'Failed to save variable', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Delete Variable
+  const handleDeleteVariable = async (idx, key) => {
+    if (!window.confirm(`Are you sure you want to delete environment variable "${key}"?`)) return;
+    try {
+      const updatedVars = currentEnvVars.filter((_, i) => i !== idx);
+      await api.post(`/environments/pipeline-vars/${currentPipeline._id}`, { envVars: updatedVars });
+      showToast(`Variable "${key}" deleted ✓`);
+      fetchData();
+    } catch (err) {
+      showToast(err.message || 'Failed to delete variable', 'error');
+    }
+  };
+
+  // Bulk Import .env
+  const handleBulkImportEnv = async () => {
+    if (!bulkEnvText.trim()) {
+      showToast('Please paste .env content', 'error');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const lines = bulkEnvText.split('\n');
+      const parsedVars = [];
+
+      lines.forEach((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) return;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx > 0) {
+          const key = trimmed.substring(0, eqIdx).trim().toUpperCase();
+          let val = trimmed.substring(eqIdx + 1).trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          const isSecret = /secret|pass|key|token|auth|uri|credential|private/i.test(key);
+          parsedVars.push({ key, value: val, isSecret });
+        }
+      });
+
+      if (parsedVars.length === 0) {
+        showToast('No valid KEY=VALUE pairs found in text', 'error');
+        return;
+      }
+
+      // Merge with existing
+      const existingMap = new Map(currentEnvVars.map((v) => [v.key, v]));
+      parsedVars.forEach((v) => existingMap.set(v.key, v));
+      const merged = Array.from(existingMap.values());
+
+      await api.post(`/environments/pipeline-vars/${currentPipeline._id}`, { envVars: merged });
+      showToast(`Imported ${parsedVars.length} variables successfully! ✓`);
+      closeModal();
+      fetchData();
+    } catch (err) {
+      showToast(err.message || 'Bulk import failed', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Fast Sync & Restart Container
+  const handleFastSyncRestart = async () => {
+    if (!currentPipeline) return;
+    try {
+      setSyncing(true);
+      const res = await api.post(`/environments/sync-restart/${currentPipeline._id}`);
+      if (res.success) {
+        showToast(res.message || '⚡ Container restarted with updated environment variables! ✓', 'success');
+      } else {
+        showToast(res.message || 'Restart failed', 'error');
+      }
+      fetchData();
+    } catch (err) {
+      showToast(err.message || 'Fast sync & restart failed', 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Attach Custom Domain
+  const handleAttachDomain = async () => {
+    if (!domainInput.trim()) {
+      showToast('Please enter a valid domain name (e.g. api.mycollege.com)', 'error');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await api.post(`/dns/${currentPipeline._id}/attach`, { domain: domainInput.trim() });
+      if (res.success) {
+        showToast(res.message || 'Custom domain attached successfully! ✓');
+        fetchDnsDetails(currentPipeline._id);
+        fetchData();
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to attach domain', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Verify Custom Domain
+  const handleVerifyDns = async () => {
+    if (!currentPipeline) return;
+    try {
+      setDnsVerifying(true);
+      setDnsResult(null);
+      const res = await api.post(`/dns/${currentPipeline._id}/verify`);
+      setDnsResult(res);
+      if (res.verified) {
+        showToast('🎉 Domain DNS verified! Traffic is actively routing to your deployment.', 'success');
+      } else {
+        showToast(res.message || 'DNS verification failed. Record not pointing to server.', 'error');
+      }
+      fetchDnsDetails(currentPipeline._id);
+      fetchData();
+    } catch (err) {
+      showToast(err.message || 'DNS verification check failed', 'error');
+    } finally {
+      setDnsVerifying(false);
+    }
+  };
+
+  // Cloudflare Auto-Setup
+  const handleCloudflareAuto = async () => {
+    if (!currentPipeline) return;
+    try {
+      setCfSettingUp(true);
+      const res = await api.post(`/dns/${currentPipeline._id}/cloudflare-auto`);
+      if (res.success) {
+        showToast(res.message || 'Cloudflare DNS record created with Orange Cloud SSL! ✓', 'success');
+        fetchDnsDetails(currentPipeline._id);
+        fetchData();
+      } else {
+        showToast(res.message || 'Cloudflare setup failed', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'Cloudflare DNS auto-setup failed', 'error');
+    } finally {
+      setCfSettingUp(false);
+    }
   };
 
   return (
     <div className="environments-container">
-      {/* Toast Banner */}
+      {/* Toast Notification */}
       {toastMessage && (
-        <div className="toast-notification">
-          <CheckCircle2 size={16} className="toast-icon" />
+        <div className={`toast-notification ${toastType === 'error' ? 'toast-error' : ''}`}>
+          {toastType === 'error' ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Page Header */}
+      {/* Header */}
       <div className="page-header">
         <div className="header-title-group">
           <div className="header-icon-wrapper">
             <Server size={26} className="header-main-icon" />
           </div>
           <div>
-            <h1 className="page-title">Environments</h1>
-            <p className="page-subtitle">Configure, scale and manage infrastructure deployment targets</p>
+            <h1 className="page-title">Environments & Configuration</h1>
+            <p className="page-subtitle">Manage environment secrets, Docker variables, live DNS, and deploy targets</p>
           </div>
         </div>
 
         <div className="header-actions">
-          <button 
-            className="btn btn-primary btn-create"
-            onClick={() => openModal('createEnv')}
-          >
-            <Plus size={18} />
-            <span>Create Environment</span>
+          <button className="btn btn-secondary" onClick={fetchData} title="Refresh data">
+            <RefreshCw size={16} className={loading ? 'spin' : ''} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* Stats Quick Overview Bar */}
-      <div className="overview-stats-grid">
-        <div className="stat-card glass-card">
-          <div className="stat-main-content">
-            <div className="stat-icon-wrapper blue">
-              <Server size={22} />
-            </div>
-            <div className="stat-info">
-              <span className="stat-label">Total Environments</span>
-              <div className="stat-value">{totalEnvs}</div>
-            </div>
-          </div>
-          <div className="stat-subtext">Across all providers</div>
-        </div>
+      {/* Navigation Tabs */}
+      <div className="dashboard-tabs-bar">
+        <button
+          className={`tab-item-btn ${activeTab === 'envvars' ? 'active' : ''}`}
+          onClick={() => setActiveTab('envvars')}
+        >
+          <Lock size={16} />
+          <span>Environment Variables & Secrets</span>
+          {currentEnvVars.length > 0 && <span className="tab-badge">{currentEnvVars.length}</span>}
+        </button>
 
-        <div className="stat-card glass-card">
-          <div className="stat-main-content">
-            <div className="stat-icon-wrapper green">
-              <ShieldCheck size={22} />
-            </div>
-            <div className="stat-info">
-              <span className="stat-label">Healthy Systems</span>
-              <div className="stat-value text-green">{healthyCount}</div>
-            </div>
-          </div>
-          <div className="stat-subtext text-green">100% healthy</div>
-        </div>
+        <button
+          className={`tab-item-btn ${activeTab === 'dns' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dns')}
+        >
+          <Globe size={16} />
+          <span>Custom Domains & DNS</span>
+          {dnsInfo?.customDomain && <span className="tab-badge green">Active</span>}
+        </button>
 
-        <div className="stat-card glass-card">
-          <div className="stat-main-content">
-            <div className="stat-icon-wrapper yellow">
-              <AlertTriangle size={22} />
-            </div>
-            <div className="stat-info">
-              <span className="stat-label">Degraded</span>
-              <div className="stat-value text-yellow">{degradedCount}</div>
-            </div>
-          </div>
-          <div className="stat-subtext text-yellow">Needs attention</div>
-        </div>
-
-        <div className="stat-card glass-card">
-          <div className="stat-main-content">
-            <div className="stat-icon-wrapper gray">
-              <XCircle size={22} />
-            </div>
-            <div className="stat-info">
-              <span className="stat-label">Offline</span>
-              <div className="stat-value">{offlineCount}</div>
-            </div>
-          </div>
-          <div className="stat-subtext">Not running</div>
-        </div>
-
-        <div className="stat-card glass-card">
-          <div className="stat-main-content">
-            <div className="stat-icon-wrapper purple">
-              <Layers size={22} />
-            </div>
-            <div className="stat-info">
-              <span className="stat-label">Active Microservices</span>
-              <div className="stat-value">{totalServices}</div>
-            </div>
-          </div>
-          <div className="stat-subtext">Deployed services</div>
-        </div>
+        <button
+          className={`tab-item-btn ${activeTab === 'targets' ? 'active' : ''}`}
+          onClick={() => setActiveTab('targets')}
+        >
+          <Server size={16} />
+          <span>Deploy Targets & Clusters</span>
+          <span className="tab-badge">{environments.length}</span>
+        </button>
       </div>
 
-      {/* Filter and Search Section */}
-      <div className="filters-bar">
-        <div className="search-box">
-          <Search size={16} className="search-icon" />
-          <input
-            type="text"
-            placeholder="Search environments by name, provider or region..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button className="clear-search" onClick={() => setSearchQuery('')}>
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        <div className="filter-group">
-          <div className="filter-item">
-            <Filter size={14} className="env-filter-icon" />
-            <span className="filter-label">STATUS:</span>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="All">All Statuses</option>
-              <option value="Healthy">Healthy</option>
-              <option value="Degraded">Degraded</option>
-              <option value="Offline">Offline</option>
-            </select>
-          </div>
-
-          <div className="filter-item">
-            <Cloud size={14} className="env-filter-icon" />
-            <span className="filter-label">CLOUD:</span>
-            <select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}>
-              <option value="All">All Cloud Providers</option>
-              <option value="AWS">AWS</option>
-              <option value="Azure">Azure</option>
-              <option value="GCP">GCP</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Environment Cards Grid (3 Columns) */}
-      <div className="section-title-wrapper">
-        <h2 className="section-title">
-          <Server size={18} className="section-icon" />
-          Active Environments ({filteredEnvironments.length})
-        </h2>
-      </div>
-
-      <div className="environments-grid">
-        {loading ? (
-          <div className="empty-state">
-            <div className="spin" style={{ color: 'var(--accent-blue)', marginBottom: '10px' }}>
-              <RefreshCw size={24} />
+      {/* ================================================================ */}
+      {/* TAB 1: ENVIRONMENT VARIABLES & SECRETS DASHBOARD                */}
+      {/* ================================================================ */}
+      {activeTab === 'envvars' && (
+        <div className="tab-pane-content">
+          {/* Pipeline Selector & Actions Toolbar */}
+          <div className="env-toolbar-card glass-card">
+            <div className="pipeline-picker-box">
+              <label>Select Pipeline / Application:</label>
+              <select
+                className="pipeline-select-dropdown"
+                value={selectedPipelineId}
+                onChange={(e) => setSelectedPipelineId(e.target.value)}
+              >
+                {pipelines.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} ({p.deploymentTarget?.toUpperCase()} • {p.environment || 'Production'})
+                  </option>
+                ))}
+              </select>
             </div>
-            <h3>Loading Environments...</h3>
-          </div>
-        ) : filteredEnvironments.length === 0 ? (
-          <div className="empty-state">
-            <Server size={40} className="empty-icon" />
-            <h3>No environments found</h3>
-            <p>Try clearing your search query or filters to view environments.</p>
-            <button 
-              className="btn btn-secondary"
-              onClick={() => { setSearchQuery(''); setStatusFilter('All'); setProviderFilter('All'); }}
-            >
-              Reset Filters
-            </button>
-          </div>
-        ) : (
-          filteredEnvironments.map((env) => {
-            const statusBorderClass = `border-${env.status.toLowerCase()}`;
-            return (
-              <div key={env._id || env.id} className={`env-card ${statusBorderClass}`}>
-                {/* Header of Environment Card */}
-                <div className="card-header">
-                  <div className="env-title-row">
-                    <h3 className="env-name">{env.name}</h3>
-                    {renderStatusBadge(env.status)}
-                  </div>
-                  
-                  <div className="env-meta-tags">
-                    {renderProviderBadge(env.provider)}
-                    <span className="region-tag">
-                      <Globe size={12} />
-                      {env.region}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Card Main Metrics */}
-                <div className="card-body">
-                  <div className="metric-row">
-                    <div className="metric-item">
-                      <span className="metric-label">
-                        <Layers size={13} />
-                        Services
-                      </span>
-                      <span className="metric-value">{env.servicesCount} Running</span>
-                    </div>
-
-                    <div className="metric-item">
-                      <span className="metric-label">
-                        <Clock size={13} />
-                        Last Deploy
-                      </span>
-                      <span className="metric-value highlight">{env.lastDeployment}</span>
-                    </div>
-                  </div>
-
-                  {/* Resource Usage Bars */}
-                  <div className="resource-bars">
-                    {/* CPU Usage */}
-                    <div className="progress-group">
-                      <div className="progress-header">
-                        <span className="progress-label">
-                          <Cpu size={13} /> CPU Usage
-                        </span>
-                        <span className={`progress-percentage ${env.cpuUsage > 80 ? 'high-load' : ''}`}>
-                          {env.cpuUsage}%
-                        </span>
-                      </div>
-                      <div className="progress-track">
-                        <div
-                          className={`progress-fill ${env.cpuUsage > 80 ? 'warning' : 'normal'}`}
-                          style={{ width: `${env.cpuUsage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Memory Usage */}
-                    <div className="progress-group">
-                      <div className="progress-header">
-                        <span className="progress-label">
-                          <HardDrive size={13} /> Memory Usage
-                        </span>
-                        <span className={`progress-percentage ${env.memUsage > 80 ? 'high-load' : ''}`}>
-                          {env.memUsage}%
-                        </span>
-                      </div>
-                      <div className="progress-track">
-                        <div
-                          className={`progress-fill ${env.memUsage > 80 ? 'warning' : 'normal-cyan'}`}
-                          style={{ width: `${env.memUsage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Additional info badge */}
-                  <div className="env-cluster-info">
-                    <span className="cluster-name">{env.clusterName}</span>
-                    <span className="instances-count">{env.instances}</span>
-                  </div>
-                </div>
-
-                {/* Card Action Footer */}
-                <div className="card-actions">
-                  <button 
-                    className="action-btn"
-                    title="Configure environment settings"
-                    onClick={() => openModal('configure', env)}
-                  >
-                    <Settings size={14} />
-                    <span>Configure</span>
-                  </button>
-
-                  <button 
-                    className="action-btn"
-                    title="View live console logs"
-                    onClick={() => openModal('logs', env)}
-                  >
-                    <Terminal size={14} />
-                    <span>View Logs</span>
-                  </button>
-
-                  <button 
-                    className="action-btn action-btn-accent"
-                    title="Scale cluster instances"
-                    onClick={() => openModal('scale', env)}
-                  >
-                    <Sliders size={14} />
-                    <span>Scale</span>
-                  </button>
-                </div>
+            {currentPipeline && (
+              <div className="pipeline-quick-meta">
+                <span className="meta-item">
+                  <Activity size={14} className="text-green" />
+                  Target: <strong>{currentPipeline.deploymentTarget || 'docker'}</strong>
+                </span>
+                {currentPipeline.deployedUrl && (
+                  <span className="meta-item">
+                    <ExternalLink size={14} className="text-cyan" />
+                    Live:{' '}
+                    <a href={currentPipeline.deployedUrl} target="_blank" rel="noreferrer">
+                      {currentPipeline.deployedUrl}
+                    </a>
+                  </span>
+                )}
               </div>
-            );
-          })
-        )}
-      </div>
+            )}
 
-      {/* Environment Variables Section */}
-      <div className="env-variables-section">
-        <div className="section-header-row">
-          <div>
-            <h2 className="section-title">
-              <Lock size={18} className="section-icon" />
-              Environment Variables & Secrets
-            </h2>
-            <p className="section-description">
-              Securely store and share environment secrets across deployment targets
-            </p>
+            <div className="env-action-buttons">
+              <button className="btn btn-secondary" onClick={() => openModal('bulkEnv')}>
+                <FileText size={15} />
+                <span>Bulk Import .env</span>
+              </button>
+
+              <button className="btn btn-primary" onClick={() => openModal('createVar')}>
+                <Plus size={16} />
+                <span>Add Variable</span>
+              </button>
+
+              {currentPipeline?.deploymentTarget === 'docker' && (
+                <button
+                  className="btn btn-sync-restart"
+                  onClick={handleFastSyncRestart}
+                  disabled={syncing}
+                  title="Rewrite .env and restart container on EC2 without rebuilding (takes ~2s)"
+                >
+                  <Zap size={15} className={syncing ? 'spin text-yellow' : 'text-yellow'} />
+                  <span>{syncing ? 'Syncing...' : 'Fast Sync & Restart (~2s)'}</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="env-var-header-actions">
-            <div className="var-search-box">
-              <Search size={14} />
-              <input
-                type="text"
-                placeholder="Search variables..."
-                value={varSearchQuery}
-                onChange={(e) => setVarSearchQuery(e.target.value)}
-              />
+          {/* Variables Table */}
+          <div className="glass-card env-table-card">
+            <div className="table-header-filter-row">
+              <div className="var-search-box">
+                <Search size={15} />
+                <input
+                  type="text"
+                  placeholder="Filter variables by key..."
+                  value={varSearchQuery}
+                  onChange={(e) => setVarSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="var-count-badge">
+                Showing <strong>{filteredEnvVars.length}</strong> of {currentEnvVars.length} variables
+              </div>
             </div>
 
-            <select
-              className="var-scope-select"
-              value={selectedEnvFilter}
-              onChange={(e) => setSelectedEnvFilter(e.target.value)}
-            >
-              <option value="All">All Scope Targets</option>
-              <option value="Production">Production</option>
-              <option value="Staging">Staging</option>
-              <option value="Development">Development</option>
-              <option value="QA">QA</option>
-            </select>
-
-            <button 
-              className="btn btn-secondary btn-sm"
-              onClick={() => openModal('createVar')}
-            >
-              <Plus size={14} />
-              <span>Add Variable</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Variables Table */}
-        <div className="table-wrapper">
-          <table className="variables-table">
-            <thead>
-              <tr>
-                <th>Variable Key</th>
-                <th>Masked Secret Value</th>
-                <th>Target Scope</th>
-                <th>Last Modified</th>
-                <th className="text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEnvVars.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="table-empty">
-                    No secrets match your filter criteria.
-                  </td>
-                </tr>
-              ) : (
-                filteredEnvVars.map((v) => {
-                  const isVisible = visibleVars[v.id];
-                  const isCopied = copiedKey === v.key;
-
-                  return (
-                    <tr key={v._id || v.id}>
-                      <td className="var-key-cell">
-                        <Key size={14} className="key-icon" />
-                        <code>{v.key}</code>
-                      </td>
-
-                      <td className="var-value-cell">
-                        <div className="secret-display">
-                          <code className={`secret-code ${isVisible ? 'revealed' : ''}`}>
-                            {isVisible ? v.value : v.masked}
-                          </code>
-                          <button
-                            className="btn-icon-ghost"
-                            onClick={() => toggleVisibility(v._id || v.id)}
-                            title={isVisible ? "Hide value" : "Reveal value"}
-                          >
-                            {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                          </button>
-                        </div>
-                      </td>
-
-                      <td>
-                        <span className="scope-pill">
-                          {v.scope}
-                        </span>
-                      </td>
-
-                      <td className="updated-cell">
-                        <Clock size={12} />
-                        {v.updatedAt}
-                      </td>
-
-                      <td className="text-right">
-                        <div className="table-action-group">
-                          <button
-                            className={`btn-table-action ${isCopied ? 'copied' : ''}`}
-                            onClick={() => handleCopyValue(v.key, v.value)}
-                            title="Copy to clipboard"
-                          >
-                            {isCopied ? <Check size={14} /> : <Copy size={14} />}
-                            <span>{isCopied ? 'Copied' : 'Copy'}</span>
-                          </button>
-
-                          <button
-                            className="btn-table-action"
-                            onClick={() => openModal('editVar', v)}
-                            title="Edit environment variable"
-                          >
-                            <Edit size={14} />
-                            <span>Edit</span>
+            <div className="table-responsive">
+              <table className="variables-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '28%' }}>Variable Key</th>
+                    <th style={{ width: '42%' }}>Value</th>
+                    <th style={{ width: '15%' }}>Type</th>
+                    <th style={{ width: '15%', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEnvVars.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="empty-table-cell">
+                        <div className="empty-state-box">
+                          <Lock size={32} className="empty-icon" />
+                          <p>No environment variables configured for this pipeline.</p>
+                          <button className="btn btn-primary btn-sm" onClick={() => openModal('createVar')}>
+                            <Plus size={14} />
+                            <span>Add Your First Variable</span>
                           </button>
                         </div>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : (
+                    filteredEnvVars.map((v, idx) => {
+                      const isVisible = visibleVars[idx];
+                      const isCopied = copiedKey === v.key;
 
-      {/* Interactive Modals */}
+                      return (
+                        <tr key={v.key + idx}>
+                          <td className="var-key-cell">
+                            <Key size={14} className="key-icon" />
+                            <code className="var-key-code">{v.key}</code>
+                          </td>
+
+                          <td className="var-value-cell">
+                            <div className="secret-display-box">
+                              <code className={`var-value-code ${isVisible ? 'revealed' : ''}`}>
+                                {v.isSecret && !isVisible ? '••••••••••••••••' : v.value}
+                              </code>
+
+                              {v.isSecret && (
+                                <button
+                                  className="btn-icon-ghost"
+                                  onClick={() => toggleVisibility(idx)}
+                                  title={isVisible ? 'Mask value' : 'Reveal value'}
+                                >
+                                  {isVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                                </button>
+                              )}
+
+                              <button
+                                className={`btn-icon-ghost ${isCopied ? 'copied' : ''}`}
+                                onClick={() => handleCopyValue(v.key, v.value)}
+                                title="Copy value to clipboard"
+                              >
+                                {isCopied ? <Check size={14} className="text-green" /> : <Copy size={14} />}
+                              </button>
+                            </div>
+                          </td>
+
+                          <td>
+                            {v.isSecret ? (
+                              <span className="type-pill secret">
+                                <Lock size={12} />
+                                <span>Secret</span>
+                              </span>
+                            ) : (
+                              <span className="type-pill plain">
+                                <Globe size={12} />
+                                <span>Plain</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="text-right">
+                            <div className="actions-cell-group">
+                              <button
+                                className="action-circle-btn"
+                                onClick={() => openModal('editVar', { ...v, index: idx })}
+                                title="Edit variable"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                className="action-circle-btn danger"
+                                onClick={() => handleDeleteVariable(idx, v.key)}
+                                title="Delete variable"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/* TAB 2: CUSTOM DOMAINS & DNS MANAGER                             */}
+      {/* ================================================================ */}
+      {activeTab === 'dns' && (
+        <div className="tab-pane-content">
+          {/* Pipeline Picker */}
+          <div className="env-toolbar-card glass-card">
+            <div className="pipeline-picker-box">
+              <label>Select Pipeline for Domain Routing:</label>
+              <select
+                className="pipeline-select-dropdown"
+                value={selectedPipelineId}
+                onChange={(e) => setSelectedPipelineId(e.target.value)}
+              >
+                {pipelines.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} ({p.deploymentTarget?.toUpperCase()} • {p.deployedUrl || 'No URL'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Domain Attachment Card */}
+          <div className="glass-card dns-manager-card">
+            <div className="card-top-title">
+              <Globe size={22} className="text-cyan" />
+              <div>
+                <h2>Custom Domain & DNS Routing</h2>
+                <p>Connect a custom domain (e.g. <code>api.mycollege.com</code>) to your backend or frontend</p>
+              </div>
+            </div>
+
+            <div className="domain-input-section">
+              <label>Domain or Subdomain Name:</label>
+              <div className="domain-input-row">
+                <div className="domain-input-wrapper">
+                  <Globe size={16} className="domain-globe-icon" />
+                  <input
+                    type="text"
+                    placeholder="e.g. api.mycollege.com or mycollege.com"
+                    value={domainInput}
+                    onChange={(e) => setDomainInput(e.target.value)}
+                  />
+                </div>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAttachDomain}
+                  disabled={submitting || !domainInput.trim()}
+                >
+                  <Plus size={16} />
+                  <span>Attach Domain</span>
+                </button>
+              </div>
+            </div>
+
+            {/* DNS Instructions & Verification Box */}
+            {dnsInfo?.customDomain ? (
+              <div className="dns-instructions-box">
+                <div className="dns-status-banner">
+                  <div className="status-label-group">
+                    <span className="status-label-text">Domain Status:</span>
+                    {dnsInfo.domainStatus === 'verified' || dnsInfo.domainStatus === 'active' ? (
+                      <span className="status-pill status-healthy">
+                        <CheckCircle2 size={14} className="green" />
+                        <span>Verified & Active ✓</span>
+                      </span>
+                    ) : (
+                      <span className="status-pill status-degraded">
+                        <Clock size={14} className="yellow" />
+                        <span>Pending DNS Setup</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="ssl-status-group">
+                    <ShieldCheck size={16} className="text-green" />
+                    <span>SSL/TLS: <strong>Auto-Managed / Active</strong></span>
+                  </div>
+                </div>
+
+                <div className="dns-record-details">
+                  <h3>Required DNS Record in your Domain Registrar (GoDaddy, Cloudflare, Namecheap):</h3>
+                  <p className="dns-instruction-subtext">
+                    Add the following DNS record to your DNS management console to route traffic to this deployment:
+                  </p>
+
+                  <div className="dns-table-box">
+                    <table className="dns-spec-table">
+                      <thead>
+                        <tr>
+                          <th>Record Type</th>
+                          <th>Host / Name</th>
+                          <th>Points To / Value</th>
+                          <th>TTL</th>
+                          <th className="text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>
+                            <span className="dns-badge-type">{dnsInfo.expectedRecord?.recordType || 'A'}</span>
+                          </td>
+                          <td>
+                            <code className="font-mono">{dnsInfo.expectedRecord?.name || '@'}</code>
+                          </td>
+                          <td className="dns-target-val">
+                            <code className="font-mono">{dnsInfo.expectedRecord?.value}</code>
+                          </td>
+                          <td>Auto (300s)</td>
+                          <td className="text-right">
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => handleCopyValue('DNS Target', dnsInfo.expectedRecord?.value)}
+                            >
+                              <Copy size={13} />
+                              <span>Copy Target</span>
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Verification Feedback */}
+                {dnsResult && (
+                  <div className={`dns-feedback-banner ${dnsResult.verified ? 'success' : 'warning'}`}>
+                    {dnsResult.verified ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+                    <span>{dnsResult.message}</span>
+                  </div>
+                )}
+
+                {/* Verification Action Buttons */}
+                <div className="dns-actions-row">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleVerifyDns}
+                    disabled={dnsVerifying}
+                  >
+                    <RefreshCw size={15} className={dnsVerifying ? 'spin' : ''} />
+                    <span>{dnsVerifying ? 'Checking DNS Records...' : 'Verify DNS Now'}</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary btn-cf"
+                    onClick={handleCloudflareAuto}
+                    disabled={cfSettingUp}
+                    title="Automatically add this DNS record to your connected Cloudflare account"
+                  >
+                    <Cloud size={15} className="text-orange" />
+                    <span>{cfSettingUp ? 'Configuring Cloudflare...' : '1-Click Cloudflare DNS Setup'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="no-domain-attached-box">
+                <Globe size={36} className="text-muted" />
+                <p>No custom domain attached yet. Enter your domain above and click <strong>"Attach Domain"</strong> to view DNS instructions.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/* TAB 3: DEPLOY TARGETS & CLUSTERS                                */}
+      {/* ================================================================ */}
+      {activeTab === 'targets' && (
+        <div className="tab-pane-content">
+          {/* Stats Bar */}
+          <div className="overview-stats-grid">
+            <div className="stat-card glass-card">
+              <div className="stat-main-content">
+                <div className="stat-icon-wrapper blue">
+                  <Server size={22} />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-label">Total Targets</span>
+                  <div className="stat-value">{environments.length}</div>
+                </div>
+              </div>
+              <div className="stat-subtext">Active deployment targets</div>
+            </div>
+
+            <div className="stat-card glass-card">
+              <div className="stat-main-content">
+                <div className="stat-icon-wrapper green">
+                  <ShieldCheck size={22} />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-label">Healthy</span>
+                  <div className="stat-value text-green">
+                    {environments.filter((e) => e.status === 'Healthy').length}
+                  </div>
+                </div>
+              </div>
+              <div className="stat-subtext text-green">100% operational</div>
+            </div>
+
+            <div className="stat-card glass-card">
+              <div className="stat-main-content">
+                <div className="stat-icon-wrapper purple">
+                  <Layers size={22} />
+                </div>
+                <div className="stat-info">
+                  <span className="stat-label">Deploy Targets</span>
+                  <div className="stat-value">{pipelines.length}</div>
+                </div>
+              </div>
+              <div className="stat-subtext">Configured pipelines</div>
+            </div>
+          </div>
+
+          {/* Grid of Environments */}
+          <div className="environments-grid">
+            {environments.map((env) => (
+              <div className="env-card glass-card" key={env._id}>
+                <div className="card-top-bar">
+                  <div className="env-title-group">
+                    <Server size={18} className="env-card-icon" />
+                    <div>
+                      <h3 className="env-name">{env.name}</h3>
+                      <span className="env-provider-pill">{env.provider || 'AWS'}</span>
+                    </div>
+                  </div>
+                  <span className="status-pill status-healthy">
+                    <CheckCircle2 size={12} className="green" />
+                    <span>{env.status}</span>
+                  </span>
+                </div>
+
+                <div className="env-meta-list">
+                  <div className="meta-row">
+                    <span className="meta-label">Region:</span>
+                    <span className="meta-val">{env.region || 'ap-south-1'}</span>
+                  </div>
+                  {env.deployedUrl && (
+                    <div className="meta-row">
+                      <span className="meta-label">Endpoint:</span>
+                      <a href={env.deployedUrl} target="_blank" rel="noreferrer" className="meta-val text-cyan">
+                        {env.deployedUrl}
+                      </a>
+                    </div>
+                  )}
+                  {env.customDomain && (
+                    <div className="meta-row">
+                      <span className="meta-label">Domain:</span>
+                      <span className="meta-val text-green font-mono">{env.customDomain}</span>
+                    </div>
+                  )}
+                  <div className="meta-row">
+                    <span className="meta-label">Instance:</span>
+                    <span className="meta-val">{env.instances || '1 EC2 Node'}</span>
+                  </div>
+                </div>
+
+                <div className="card-actions">
+                  <button
+                    className="action-btn"
+                    onClick={() => {
+                      setSelectedPipelineId(env._id);
+                      setActiveTab('envvars');
+                    }}
+                  >
+                    <Lock size={14} />
+                    <span>Variables</span>
+                  </button>
+
+                  <button
+                    className="action-btn action-btn-accent"
+                    onClick={() => {
+                      setSelectedPipelineId(env._id);
+                      setActiveTab('dns');
+                    }}
+                  >
+                    <Globe size={14} />
+                    <span>Custom DNS</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/* MODALS                                                           */}
+      {/* ================================================================ */}
       {activeModal && (
-        <div className="modal-backdrop" onClick={closeModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop">
+          <div className="modal-content glass-card">
             <div className="modal-header">
               <h3>
-                {activeModal === 'createEnv' && 'Create New Environment'}
-                {activeModal === 'configure' && `Configure ${selectedModalData?.name}`}
-                {activeModal === 'logs' && `Console Logs: ${selectedModalData?.name}`}
-                {activeModal === 'scale' && `Scale Cluster: ${selectedModalData?.name}`}
-                {activeModal === 'editVar' && `Edit Variable: ${selectedModalData?.key}`}
-                {activeModal === 'createVar' && 'Add New Secret / Variable'}
+                {activeModal === 'createVar' && 'Add Environment Variable'}
+                {activeModal === 'editVar' && `Edit Variable: ${varFormData.key}`}
+                {activeModal === 'bulkEnv' && 'Bulk Import .env File'}
               </h3>
               <button className="close-btn" onClick={closeModal}>
                 <X size={18} />
@@ -686,173 +944,77 @@ export default function EnvironmentsPage() {
             </div>
 
             <div className="modal-body">
-              {/* CREATE ENVIRONMENT MODAL */}
-              {activeModal === 'createEnv' && (
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label>Environment Name</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Sandbox, Pre-prod" 
-                      value={envFormData.name}
-                      onChange={(e) => setEnvFormData({...envFormData, name: e.target.value})}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Cloud Provider</label>
-                    <select 
-                      value={envFormData.provider}
-                      onChange={(e) => setEnvFormData({...envFormData, provider: e.target.value})}
-                    >
-                      <option value="AWS">Amazon Web Services (AWS)</option>
-                      <option value="Azure">Microsoft Azure</option>
-                      <option value="GCP">Google Cloud Platform (GCP)</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Region</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. us-east-1, westeurope" 
-                      value={envFormData.region}
-                      onChange={(e) => setEnvFormData({...envFormData, region: e.target.value})}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Cluster Name (Optional)</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. eks-cluster-01" 
-                      value={envFormData.clusterName}
-                      onChange={(e) => setEnvFormData({...envFormData, clusterName: e.target.value})}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* CONFIGURE MODAL */}
-              {activeModal === 'configure' && (
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label>Cluster ID / Name</label>
-                    <input type="text" defaultValue={selectedModalData?.clusterName} />
-                  </div>
-                  <div className="form-group">
-                    <label>Target Region</label>
-                    <input type="text" defaultValue={selectedModalData?.region} />
-                  </div>
-                  <div className="form-group">
-                    <label>Auto-Scaling Minimum Nodes</label>
-                    <input type="number" defaultValue="2" />
-                  </div>
-                  <div className="form-group">
-                    <label>Auto-Scaling Maximum Nodes</label>
-                    <input type="number" defaultValue="10" />
-                  </div>
-                </div>
-              )}
-
-              {/* VIEW LOGS MODAL */}
-              {activeModal === 'logs' && (
-                <div className="logs-viewer-box">
-                  <div className="log-line text-muted">[2026-07-29 21:20:01] INFO [cluster-manager] Initializing node pool sync...</div>
-                  <div className="log-line">[2026-07-29 21:20:04] INFO [ingress-controller] Routing rule refreshed for {selectedModalData?.name}</div>
-                  <div className="log-line text-success">[2026-07-29 21:21:10] SUCCESS [health-check] All {selectedModalData?.servicesCount} microservices responding with status 200 OK.</div>
-                  <div className="log-line">[2026-07-29 21:23:45] METRICS [telemetry] Current CPU: {selectedModalData?.cpuUsage}%, Memory: {selectedModalData?.memUsage}%</div>
-                  <div className="log-line text-cyan">[2026-07-29 21:25:12] STREAM [live-tail] Listening for incoming traffic...</div>
-                </div>
-              )}
-
-              {/* SCALE MODAL */}
-              {activeModal === 'scale' && (
-                <div className="scale-modal-content">
-                  <p className="scale-desc">
-                    Adjust the active instance node count for <strong>{selectedModalData?.name}</strong> across {selectedModalData?.region}.
-                  </p>
-                  <div className="scale-control-box">
-                    <label>Replica Service Count</label>
-                    <div className="scale-slider-row">
-                      <input type="range" min="0" max="30" defaultValue={selectedModalData?.servicesCount} />
-                      <span className="scale-num">{selectedModalData?.servicesCount} replicas</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* EDIT OR CREATE VAR MODAL */}
-              {(activeModal === 'editVar' || activeModal === 'createVar') && (
+              {/* ADD OR EDIT VAR MODAL */}
+              {(activeModal === 'createVar' || activeModal === 'editVar') && (
                 <div className="form-grid">
                   <div className="form-group full-width">
-                    <label>Select Environment</label>
-                    <select
-                      value={varFormData.environmentId}
-                      onChange={(e) => setVarFormData({...varFormData, environmentId: e.target.value})}
-                    >
-                      <option value="">-- Choose Environment --</option>
-                      {environments.map(env => (
-                        <option key={env._id} value={env._id}>{env.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Variable Key</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. DATABASE_URL" 
-                      value={varFormData.key} 
-                      onChange={(e) => setVarFormData({...varFormData, key: e.target.value})}
+                    <label>Variable Key (e.g. MONGO_URI, JWT_SECRET, PORT)</label>
+                    <input
+                      type="text"
+                      className="font-mono uppercase"
+                      placeholder="e.g. MONGO_URI"
+                      value={varFormData.key}
+                      onChange={(e) => setVarFormData({ ...varFormData, key: e.target.value })}
                     />
                   </div>
-                  <div className="form-group">
-                    <label>Scope / Tag</label>
-                    <select
-                      value={varFormData.scope}
-                      onChange={(e) => setVarFormData({...varFormData, scope: e.target.value})}
-                    >
-                      <option value="Local">Local</option>
-                      <option value="Global">Global</option>
-                      <option value="Production">Production</option>
-                      <option value="Staging">Staging</option>
-                    </select>
-                  </div>
+
                   <div className="form-group full-width">
                     <label>Variable Value</label>
-                    <input 
-                      type="text" 
-                      className="font-mono" 
-                      placeholder="Enter secret value..."
+                    <textarea
+                      rows={3}
+                      className="font-mono"
+                      placeholder="Enter variable value..."
                       value={varFormData.value}
-                      onChange={(e) => setVarFormData({...varFormData, value: e.target.value})}
+                      onChange={(e) => setVarFormData({ ...varFormData, value: e.target.value })}
                     />
                   </div>
+
                   <div className="form-group full-width">
                     <label className="checkbox-label">
-                      <input 
-                        type="checkbox" 
-                        checked={varFormData.masked}
-                        onChange={(e) => setVarFormData({...varFormData, masked: e.target.checked})}
+                      <input
+                        type="checkbox"
+                        checked={varFormData.isSecret}
+                        onChange={(e) => setVarFormData({ ...varFormData, isSecret: e.target.checked })}
                       />
-                      Mask this value in the dashboard (Sensitive Secret)
+                      <span>Mask as Sensitive Secret (Value will be hidden by default with Eye reveal toggle)</span>
                     </label>
+                  </div>
+                </div>
+              )}
+
+              {/* BULK .ENV IMPORT MODAL */}
+              {activeModal === 'bulkEnv' && (
+                <div className="form-grid">
+                  <p className="modal-subtext">
+                    Paste your raw <code>.env</code> file contents below. Keys and values will be parsed and merged
+                    automatically.
+                  </p>
+                  <div className="form-group full-width">
+                    <textarea
+                      rows={10}
+                      className="font-mono text-sm"
+                      placeholder={`PORT=5000\nMONGO_URI=mongodb+srv://...\nJWT_SECRET=supersecret\nNODE_ENV=production`}
+                      value={bulkEnvText}
+                      onChange={(e) => setBulkEnvText(e.target.value)}
+                    />
                   </div>
                 </div>
               )}
             </div>
 
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={closeModal} disabled={submitting}>Cancel</button>
-              {activeModal === 'createEnv' && (
-                <button className="btn btn-primary" onClick={handleCreateEnvironment} disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Create Environment'}
+              <button className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
+                Cancel
+              </button>
+              {(activeModal === 'createVar' || activeModal === 'editVar') && (
+                <button className="btn btn-primary" onClick={handleSaveVariable} disabled={submitting}>
+                  {submitting ? 'Saving...' : 'Save Variable'}
                 </button>
               )}
-              {activeModal === 'createVar' && (
-                <button className="btn btn-primary" onClick={handleCreateVariable} disabled={submitting}>
-                  {submitting ? 'Adding...' : 'Add Secret'}
+              {activeModal === 'bulkEnv' && (
+                <button className="btn btn-primary" onClick={handleBulkImportEnv} disabled={submitting}>
+                  {submitting ? 'Importing...' : 'Import Variables'}
                 </button>
-              )}
-              {(activeModal !== 'createEnv' && activeModal !== 'createVar') && (
-                <button className="btn btn-primary" onClick={closeModal}>Save Changes</button>
               )}
             </div>
           </div>

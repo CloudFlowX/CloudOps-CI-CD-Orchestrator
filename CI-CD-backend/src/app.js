@@ -16,6 +16,7 @@ import alertRoutes from "./routes/alert.routes.js";
 import alertRuleRoutes from "./routes/alertRule.routes.js";
 import settingRoutes from "./routes/setting.routes.js";
 import logRoutes from "./routes/log.routes.js";
+import dnsRoutes from "./routes/dns.routes.js";
 const app = express();
 
 // ==========================
@@ -67,6 +68,9 @@ app.use("/api/v1/cloud-accounts", cloudAccountRoutes);
 
 // Environments Routes
 app.use("/api/v1/environments", environmentRoutes);
+
+// Custom Domains & DNS Routes
+app.use("/api/v1/dns", dnsRoutes);
 
 // User & Settings Routes
 app.use("/api/v1/users", userRoutes);
