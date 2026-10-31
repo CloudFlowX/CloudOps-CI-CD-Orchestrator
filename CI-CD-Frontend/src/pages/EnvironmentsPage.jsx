@@ -50,6 +50,7 @@ export default function EnvironmentsPage() {
   // Forms state
   const [envFormData, setEnvFormData] = useState({ name: '', provider: 'AWS', region: 'ap-south-1', clusterName: '' });
   const [varFormData, setVarFormData] = useState({ key: '', value: '', isSecret: false, index: null });
+  const [showModalValue, setShowModalValue] = useState(false);
   const [bulkEnvText, setBulkEnvText] = useState('');
   const [domainInput, setDomainInput] = useState('');
   const [dnsInfo, setDnsInfo] = useState(null);
@@ -95,8 +96,15 @@ export default function EnvironmentsPage() {
       const realPipelines = pipeRes.pipelines || [];
       setPipelines(realPipelines);
 
-      if (realPipelines.length > 0 && !selectedPipelineId) {
-        setSelectedPipelineId(realPipelines[0]._id);
+      if (realPipelines.length > 0) {
+        // Automatically prefer pipeline that has variables or is collage-backend
+        const bestPipeline =
+          realPipelines.find((p) => p.name?.toLowerCase().includes("collage-backend")) ||
+          realPipelines.find((p) => Array.isArray(p.envVars) && p.envVars.length > 0) ||
+          realPipelines[0];
+        if (!selectedPipelineId || !realPipelines.some((p) => p._id === selectedPipelineId)) {
+          setSelectedPipelineId(bestPipeline._id);
+        }
       }
 
       // 2. Fetch Environments
@@ -181,10 +189,21 @@ export default function EnvironmentsPage() {
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  // Quick Preset key applier
+  const handleApplyPreset = (presetKey, defaultValue = '', isSecret = false) => {
+    setVarFormData((prev) => ({
+      ...prev,
+      key: presetKey,
+      value: prev.value || defaultValue,
+      isSecret: isSecret,
+    }));
+  };
+
   // Modals management
   const openModal = (type, data = null) => {
     setActiveModal(type);
     setSelectedModalData(data);
+    setShowModalValue(false);
     if (type === 'createVar') {
       setVarFormData({ key: '', value: '', isSecret: false, index: null });
     } else if (type === 'editVar' && data) {
@@ -197,6 +216,7 @@ export default function EnvironmentsPage() {
   const closeModal = () => {
     setActiveModal(null);
     setSelectedModalData(null);
+    setShowModalValue(false);
   };
 
   // Save / Update Variable
@@ -469,7 +489,7 @@ export default function EnvironmentsPage() {
               >
                 {pipelines.map((p) => (
                   <option key={p._id} value={p._id}>
-                    {p.name} ({p.deploymentTarget?.toUpperCase()} • {p.environment || 'Production'})
+                    {p.name} ({p.deploymentTarget?.toUpperCase()} • {p.envVars?.length || 0} variables)
                   </option>
                 ))}
               </select>
@@ -931,84 +951,196 @@ export default function EnvironmentsPage() {
       {/* ================================================================ */}
       {activeModal && (
         <div className="modal-backdrop">
-          <div className="modal-content glass-card">
-            <div className="modal-header">
-              <h3>
-                {activeModal === 'createVar' && 'Add Environment Variable'}
-                {activeModal === 'editVar' && `Edit Variable: ${varFormData.key}`}
-                {activeModal === 'bulkEnv' && 'Bulk Import .env File'}
-              </h3>
-              <button className="close-btn" onClick={closeModal}>
+          <div className="modal-content glass-card modern-modal-box">
+            <div className="modal-header modern-modal-header">
+              <div className="header-badge-title">
+                <div className="modal-icon-glow">
+                  {activeModal === 'bulkEnv' ? <FileText size={20} /> : <Key size={20} />}
+                </div>
+                <div>
+                  <h3 className="modal-title-text">
+                    {activeModal === 'createVar' && 'Add Environment Variable'}
+                    {activeModal === 'editVar' && `Edit Variable: ${varFormData.key}`}
+                    {activeModal === 'bulkEnv' && 'Bulk Import .env File'}
+                  </h3>
+                  <p className="modal-subtitle-text">
+                    Target: <strong className="text-cyan">{currentPipeline?.name}</strong> • {currentPipeline?.deploymentTarget?.toUpperCase()}
+                  </p>
+                </div>
+              </div>
+              <button className="close-btn" onClick={closeModal} title="Close dialog">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="modal-body">
+            <div className="modal-body modern-modal-body">
               {/* ADD OR EDIT VAR MODAL */}
               {(activeModal === 'createVar' || activeModal === 'editVar') && (
-                <div className="form-grid">
-                  <div className="form-group full-width">
-                    <label>Variable Key (e.g. MONGO_URI, JWT_SECRET, PORT)</label>
-                    <input
-                      type="text"
-                      className="font-mono uppercase"
-                      placeholder="e.g. MONGO_URI"
-                      value={varFormData.key}
-                      onChange={(e) => setVarFormData({ ...varFormData, key: e.target.value })}
-                    />
-                  </div>
+                <div className="modern-form-container">
+                  {/* Quick Preset Chips */}
+                  {activeModal === 'createVar' && (
+                    <div className="preset-chips-section">
+                      <span className="preset-label">⚡ Common Suggestions (Click to fill):</span>
+                      <div className="preset-chips-list">
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() => handleApplyPreset('PORT', '5000', false)}
+                        >
+                          + PORT (5000)
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip preset-secret"
+                          onClick={() => handleApplyPreset('MONGO_URI', '', true)}
+                        >
+                          + MONGO_URI 🔒
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip preset-secret"
+                          onClick={() => handleApplyPreset('JWT_SECRET', '', true)}
+                        >
+                          + JWT_SECRET 🔒
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() => handleApplyPreset('NODE_ENV', 'production', false)}
+                        >
+                          + NODE_ENV
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip"
+                          onClick={() => handleApplyPreset('EMAIL_USER', '', false)}
+                        >
+                          + EMAIL_USER
+                        </button>
+                        <button
+                          type="button"
+                          className="preset-chip preset-secret"
+                          onClick={() => handleApplyPreset('EMAIL_PASS', '', true)}
+                        >
+                          + EMAIL_PASS 🔒
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="form-group full-width">
-                    <label>Variable Value</label>
-                    <textarea
-                      rows={3}
-                      className="font-mono"
-                      placeholder="Enter variable value..."
-                      value={varFormData.value}
-                      onChange={(e) => setVarFormData({ ...varFormData, value: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group full-width">
-                    <label className="checkbox-label">
+                  {/* Key Field */}
+                  <div className="modern-field-group">
+                    <div className="field-label-row">
+                      <label htmlFor="env-key-input">VARIABLE KEY / NAME</label>
+                      <span className="field-hint">Uppercase letters & underscores</span>
+                    </div>
+                    <div className="modern-input-wrapper">
+                      <Key size={16} className="input-leading-icon" />
                       <input
-                        type="checkbox"
-                        checked={varFormData.isSecret}
-                        onChange={(e) => setVarFormData({ ...varFormData, isSecret: e.target.checked })}
+                        id="env-key-input"
+                        type="text"
+                        className="modern-text-input font-mono uppercase"
+                        placeholder="e.g. MONGO_URI, JWT_SECRET, PORT"
+                        value={varFormData.key}
+                        onChange={(e) => setVarFormData({ ...varFormData, key: e.target.value.toUpperCase() })}
+                        autoFocus
                       />
-                      <span>Mask as Sensitive Secret (Value will be hidden by default with Eye reveal toggle)</span>
-                    </label>
+                    </div>
+                  </div>
+
+                  {/* Value Field */}
+                  <div className="modern-field-group">
+                    <div className="field-label-row">
+                      <label htmlFor="env-val-input">VARIABLE VALUE</label>
+                      <button
+                        type="button"
+                        className="btn-toggle-reveal"
+                        onClick={() => setShowModalValue(!showModalValue)}
+                      >
+                        {showModalValue ? <EyeOff size={13} /> : <Eye size={13} />}
+                        <span>{showModalValue ? 'Mask' : 'Show Text'}</span>
+                      </button>
+                    </div>
+                    <div className="modern-input-wrapper textarea-wrapper">
+                      <FileText size={16} className="input-leading-icon textarea-icon" />
+                      <textarea
+                        id="env-val-input"
+                        rows={3}
+                        className={`modern-text-input font-mono ${varFormData.isSecret && !showModalValue ? 'masked-input' : ''}`}
+                        placeholder="Enter value or connection string..."
+                        value={varFormData.value}
+                        onChange={(e) => setVarFormData({ ...varFormData, value: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Interactive Secret Toggle Card */}
+                  <div
+                    className={`secret-toggle-card ${varFormData.isSecret ? 'is-active' : ''}`}
+                    onClick={() => setVarFormData({ ...varFormData, isSecret: !varFormData.isSecret })}
+                  >
+                    <div className="secret-card-icon">
+                      {varFormData.isSecret ? <Lock size={20} className="text-red" /> : <Globe size={20} className="text-blue" />}
+                    </div>
+                    <div className="secret-card-info">
+                      <div className="secret-card-title">
+                        {varFormData.isSecret ? '🔒 Sensitive Secret (Masked Value)' : '🌐 Standard Variable (Plain Text)'}
+                      </div>
+                      <div className="secret-card-desc">
+                        {varFormData.isSecret
+                          ? 'Value will be masked with •••••••• on the dashboard and protected with an Eye reveal toggle.'
+                          : 'Value will be displayed as readable text in the dashboard.'}
+                      </div>
+                    </div>
+                    <div className="secret-card-switch">
+                      <div className={`switch-track ${varFormData.isSecret ? 'active' : ''}`}>
+                        <div className="switch-thumb"></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* BULK .ENV IMPORT MODAL */}
               {activeModal === 'bulkEnv' && (
-                <div className="form-grid">
+                <div className="modern-form-container">
                   <p className="modal-subtext">
-                    Paste your raw <code>.env</code> file contents below. Keys and values will be parsed and merged
+                    Paste your raw <code>.env</code> file content below. All keys and values will be parsed and merged
                     automatically.
                   </p>
-                  <div className="form-group full-width">
-                    <textarea
-                      rows={10}
-                      className="font-mono text-sm"
-                      placeholder={`PORT=5000\nMONGO_URI=mongodb+srv://...\nJWT_SECRET=supersecret\nNODE_ENV=production`}
-                      value={bulkEnvText}
-                      onChange={(e) => setBulkEnvText(e.target.value)}
-                    />
+                  <div className="modern-field-group">
+                    <div className="modern-input-wrapper textarea-wrapper">
+                      <textarea
+                        rows={10}
+                        className="modern-text-input font-mono text-sm bulk-textarea"
+                        placeholder={`PORT=5000\nMONGO_URI=mongodb+srv://...\nJWT_SECRET=supersecret\nEMAIL_USER=admin@example.com\nEMAIL_PASS=secretpassword`}
+                        value={bulkEnvText}
+                        onChange={(e) => setBulkEnvText(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer modern-modal-footer">
               <button className="btn btn-secondary" onClick={closeModal} disabled={submitting}>
                 Cancel
               </button>
               {(activeModal === 'createVar' || activeModal === 'editVar') && (
-                <button className="btn btn-primary" onClick={handleSaveVariable} disabled={submitting}>
-                  {submitting ? 'Saving...' : 'Save Variable'}
+                <button className="btn btn-primary btn-save-var" onClick={handleSaveVariable} disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <RefreshCw size={15} className="spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} />
+                      <span>{activeModal === 'editVar' ? 'Update Variable' : 'Add Variable'}</span>
+                    </>
+                  )}
                 </button>
               )}
               {activeModal === 'bulkEnv' && (
