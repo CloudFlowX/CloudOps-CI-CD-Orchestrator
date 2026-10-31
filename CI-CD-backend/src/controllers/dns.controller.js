@@ -95,6 +95,17 @@ export const getPipelineDns = async (req, res) => {
       return res.status(404).json({ success: false, message: "Pipeline not found." });
     }
 
+    const userRole = (req.user.role || "").toLowerCase();
+    const isAdmin = userRole === "admin";
+    const isOwner = pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner && pipeline.visibility === "admin_only") {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: This pipeline is restricted to Admins only.",
+      });
+    }
+
     const { targetType, targetValue } = await resolvePipelineTarget(pipeline);
 
     let expectedRecord = null;
@@ -147,6 +158,17 @@ export const attachCustomDomain = async (req, res) => {
       return res.status(404).json({ success: false, message: "Pipeline not found." });
     }
 
+    const userRole = (req.user.role || "").toLowerCase();
+    const isAdmin = userRole === "admin";
+    const isOwner = pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner && pipeline.visibility === "admin_only") {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: Only Admins or the creator can attach domains to this pipeline.",
+      });
+    }
+
     const { targetType, targetValue } = await resolvePipelineTarget(pipeline);
 
     pipeline.customDomain = fullDomain;
@@ -166,7 +188,7 @@ export const attachCustomDomain = async (req, res) => {
         action: "ATTACH_CUSTOM_DOMAIN",
         resourceType: "Pipeline",
         resourceId: pipeline._id,
-        details: `Attached custom domain "${fullDomain}" to pipeline "${pipeline.name}"`,
+        details: `User (${req.user.role}) attached custom domain "${fullDomain}" to pipeline "${pipeline.name}"`,
       });
     } catch (e) {}
 
@@ -197,6 +219,17 @@ export const verifyCustomDomain = async (req, res) => {
 
     if (!pipeline || !pipeline.customDomain) {
       return res.status(400).json({ success: false, message: "Pipeline does not have a custom domain configured." });
+    }
+
+    const userRole = (req.user.role || "").toLowerCase();
+    const isAdmin = userRole === "admin";
+    const isOwner = pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner && pipeline.visibility === "admin_only") {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: Only Admins or the creator can verify domains for this pipeline.",
+      });
     }
 
     const fullDomain = pipeline.customDomain;
@@ -256,15 +289,25 @@ export const verifyCustomDomain = async (req, res) => {
         }
 
         const ssh = new NodeSSH();
-        await ssh.connect({
-          host: targetValue,
-          username: process.env.EC2_USERNAME || "ubuntu",
-          readyTimeout: 15000,
-          ...(rawSshKey ? { privateKey: rawSshKey } : { privateKeyPath: resolvedKeyPath }),
-        });
+        const usernamesToTry = [process.env.EC2_USERNAME, "ubuntu", "ec2-user", "admin"].filter(Boolean);
+        let connected = false;
 
-        // Ensure Nginx is running and configure reverse proxy
-        const nginxConf = `
+        for (const u of [...new Set(usernamesToTry)]) {
+          try {
+            await ssh.connect({
+              host: targetValue,
+              username: u,
+              readyTimeout: 15000,
+              ...(rawSshKey ? { privateKey: rawSshKey } : { privateKeyPath: resolvedKeyPath }),
+            });
+            connected = true;
+            break;
+          } catch (e) {}
+        }
+
+        if (connected) {
+          // Ensure Nginx is running and configure reverse proxy
+          const nginxConf = `
 server {
     listen 80;
     server_name ${fullDomain};
@@ -282,13 +325,14 @@ server {
     }
 }
 `;
-        await ssh.execCommand("which nginx || sudo apt-get update && sudo apt-get install -y nginx");
-        await ssh.execCommand(`cat << 'CLOUDOPS_EOF' | sudo tee /etc/nginx/sites-available/${fullDomain}\n${nginxConf}\nCLOUDOPS_EOF`);
-        await ssh.execCommand(`sudo ln -sf /etc/nginx/sites-available/${fullDomain} /etc/nginx/sites-enabled/${fullDomain}`);
-        await ssh.execCommand("sudo nginx -t && sudo systemctl reload nginx");
-        ssh.dispose();
+          await ssh.execCommand("which nginx || sudo apt-get update && sudo apt-get install -y nginx && sudo systemctl enable --now nginx || true");
+          await ssh.execCommand(`cat << 'CLOUDOPS_EOF' | sudo tee /etc/nginx/sites-available/${fullDomain}\n${nginxConf}\nCLOUDOPS_EOF`);
+          await ssh.execCommand(`sudo ln -sf /etc/nginx/sites-available/${fullDomain} /etc/nginx/sites-enabled/${fullDomain}`);
+          await ssh.execCommand("sudo nginx -t && sudo systemctl reload nginx");
+          ssh.dispose();
 
-        logger.info(`Nginx reverse proxy configured for ${fullDomain} -> port ${targetPort} ✓`);
+          logger.info(`Nginx reverse proxy configured for ${fullDomain} -> port ${targetPort} ✓`);
+        }
       } catch (nginxErr) {
         logger.warn(`Nginx proxy configuration note: ${nginxErr.message}`);
       }
@@ -323,6 +367,17 @@ export const autoSetupCloudflareDns = async (req, res) => {
       return res.status(400).json({ success: false, message: "Attach a custom domain first." });
     }
 
+    const userRole = (req.user.role || "").toLowerCase();
+    const isAdmin = userRole === "admin";
+    const isOwner = pipeline.createdBy && pipeline.createdBy.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner && pipeline.visibility === "admin_only") {
+      return res.status(403).json({
+        success: false,
+        message: "Access Denied: Only Admins or the creator can configure Cloudflare DNS for this pipeline.",
+      });
+    }
+
     const { rootDomain, subdomain, fullDomain } = parseDomainParts(pipeline.customDomain);
     const { targetType, targetValue } = await resolvePipelineTarget(pipeline);
 
@@ -351,7 +406,13 @@ export const autoSetupCloudflareDns = async (req, res) => {
       });
     }
 
-    // 2. Add DNS Record
+    // 2. Check if record already exists on Cloudflare
+    const checkRecordRes = await axios.get(
+      `https://api.cloudflare.com/client/v4/zones/${zone.id}/dns_records?name=${fullDomain}`,
+      { headers: { Authorization: `Bearer ${apiToken}` } }
+    );
+
+    const existingRecord = checkRecordRes.data?.result?.[0];
     const recordPayload = {
       type: targetType,
       name: fullDomain,
@@ -360,13 +421,27 @@ export const autoSetupCloudflareDns = async (req, res) => {
       proxied: true, // Cloudflare Orange Cloud (Free SSL + DDoS protection)
     };
 
-    const createDnsRes = await axios.post(
-      `https://api.cloudflare.com/client/v4/zones/${zone.id}/dns_records`,
-      recordPayload,
-      { headers: { Authorization: `Bearer ${apiToken}` } }
-    );
+    let cfSuccess = false;
 
-    if (createDnsRes.data?.success) {
+    if (existingRecord) {
+      // Update existing record
+      const updateRes = await axios.put(
+        `https://api.cloudflare.com/client/v4/zones/${zone.id}/dns_records/${existingRecord.id}`,
+        recordPayload,
+        { headers: { Authorization: `Bearer ${apiToken}` } }
+      );
+      cfSuccess = !!updateRes.data?.success;
+    } else {
+      // Create new record
+      const createDnsRes = await axios.post(
+        `https://api.cloudflare.com/client/v4/zones/${zone.id}/dns_records`,
+        recordPayload,
+        { headers: { Authorization: `Bearer ${apiToken}` } }
+      );
+      cfSuccess = !!createDnsRes.data?.success;
+    }
+
+    if (cfSuccess) {
       pipeline.domainStatus = "verified";
       pipeline.sslStatus = "active";
       await pipeline.save();
@@ -378,7 +453,7 @@ export const autoSetupCloudflareDns = async (req, res) => {
     } else {
       return res.status(400).json({
         success: false,
-        message: createDnsRes.data?.errors?.[0]?.message || "Failed to create DNS record in Cloudflare.",
+        message: "Failed to configure DNS record in Cloudflare.",
       });
     }
   } catch (error) {

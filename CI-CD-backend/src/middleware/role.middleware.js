@@ -8,11 +8,14 @@ export const authorize = (...roles) => {
       });
     }
 
-    // Check role
-    if (!roles.includes(req.user.role)) {
+    const userRole = (req.user.role || "").toLowerCase();
+    const normalizedRoles = roles.map((r) => String(r).toLowerCase());
+
+    // Check role case-insensitively
+    if (!normalizedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
-        message: "Access Denied",
+        message: `Access Denied: Role '${req.user.role}' is not authorized.`,
       });
     }
 
