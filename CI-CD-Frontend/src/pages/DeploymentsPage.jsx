@@ -734,15 +734,14 @@ export default function DeploymentsPage() {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>8. EC2 Instance</label>
+                  <label>8. EC2 Instance (Auto-Detected)</label>
                   <select 
-                    required={newDeployData.deploymentTarget === 'EC2'}
                     value={newDeployData.ec2Instance}
                     onChange={(e) => setNewDeployData({...newDeployData, ec2Instance: e.target.value})}
                     className="form-input"
                     disabled={fetchingInstances || !newDeployData.awsAccount || newDeployData.cloudProvider !== 'AWS'}
                   >
-                    <option value="">{fetchingInstances ? 'Loading instances...' : 'Select EC2 Instance'}</option>
+                    <option value="">{fetchingInstances ? 'Loading instances...' : '⚡ Auto-detect Active EC2 Instance (Default)'}</option>
                     {availableInstances.map(inst => (
                       <option key={inst.id} value={inst.id}>
                         {inst.name} ({inst.id}) - {inst.state}

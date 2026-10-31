@@ -101,9 +101,40 @@ export const createPipeline = async (req, res) => {
     // Auto-resolve EC2 instance ID if not provided for AWS/Docker targets
     let resolvedEc2InstanceId = (ec2InstanceId || "").trim();
     if (!resolvedEc2InstanceId && (deploymentTarget === "aws" || deploymentTarget === "docker")) {
-      const existingPipelineWithEc2 = await Pipeline.findOne({ ec2InstanceId: { $ne: "" } }).sort({ updatedAt: -1 });
-      if (existingPipelineWithEc2?.ec2InstanceId) {
-        resolvedEc2InstanceId = existingPipelineWithEc2.ec2InstanceId;
+      // 1. Try to fetch running instance from connected AWS CloudAccount
+      if (resolvedCloudAccount) {
+        try {
+          const acc = await CloudAccount.findById(resolvedCloudAccount);
+          if (acc && acc.provider === "AWS" && acc.accessKeyId) {
+            const autoEc2 = new EC2Client({
+              region: acc.region || "ap-south-1",
+              credentials: {
+                accessKeyId: acc.accessKeyId,
+                secretAccessKey: acc.secretAccessKey,
+              },
+            });
+            const d = await autoEc2.send(new DescribeInstancesCommand({
+              Filters: [{ Name: "instance-state-name", Values: ["running"] }],
+            }));
+            const rInst = d.Reservations?.flatMap(r => r.Instances || []).find(i => i.State?.Name === "running");
+            if (rInst?.InstanceId) resolvedEc2InstanceId = rInst.InstanceId;
+          }
+        } catch (e) {
+          logger.warn(`Could not auto-fetch EC2 instance during pipeline creation: ${e.message}`);
+        }
+      }
+
+      // 2. Fallback to existing pipeline's instance ID
+      if (!resolvedEc2InstanceId) {
+        const existingPipelineWithEc2 = await Pipeline.findOne({ ec2InstanceId: { $exists: true, $ne: "" } }).sort({ updatedAt: -1 });
+        if (existingPipelineWithEc2?.ec2InstanceId) {
+          resolvedEc2InstanceId = existingPipelineWithEc2.ec2InstanceId;
+        }
+      }
+
+      // 3. Fallback to default
+      if (!resolvedEc2InstanceId) {
+        resolvedEc2InstanceId = "i-0d7303a65e207bcc9";
       }
     }
 
@@ -379,7 +410,9 @@ export const updatePipeline = async (req, res) => {
     if (cloudAccount !== undefined) {
       pipeline.cloudAccount = (cloudAccount && cloudAccount !== "") ? cloudAccount : null;
     }
-    pipeline.ec2InstanceId = ec2InstanceId !== undefined ? ec2InstanceId : pipeline.ec2InstanceId;
+    if (ec2InstanceId !== undefined && ec2InstanceId.trim() !== "") {
+      pipeline.ec2InstanceId = ec2InstanceId.trim();
+    }
     if (appPort !== undefined) pipeline.appPort = Number(appPort) || 5000;
     if (containerPort !== undefined) pipeline.containerPort = Number(containerPort) || 5000;
     if (envVars !== undefined && Array.isArray(envVars)) {
@@ -767,27 +800,43 @@ export const executePipelineJob = async (pipelineId) => {
         }
 
         // Auto-detect EC2 instance if not explicitly set on this pipeline
-        if (!pipeline.ec2InstanceId && resolvedCloudAccount && resolvedCloudAccount.provider === "AWS") {
-          try {
-            const autoEc2Client = new EC2Client({
-              region: resolvedCloudAccount.region || "ap-south-1",
-              credentials: {
-                accessKeyId: resolvedCloudAccount.accessKeyId,
-                secretAccessKey: resolvedCloudAccount.secretAccessKey,
-              },
-            });
-            const desc = await autoEc2Client.send(new DescribeInstancesCommand({
-              Filters: [{ Name: "instance-state-name", Values: ["running", "stopped"] }],
-            }));
-            const foundInst = desc.Reservations?.flatMap(r => r.Instances || []).find(i => i.State?.Name === "running")
-              || desc.Reservations?.flatMap(r => r.Instances || [])[0];
-            if (foundInst?.InstanceId) {
-              pipeline.ec2InstanceId = foundInst.InstanceId;
-              await pipeline.save();
-              onLog(`[AWS] Auto-detected active EC2 instance "${pipeline.ec2InstanceId}" from your AWS account ✓`);
+        if (!pipeline.ec2InstanceId) {
+          if (resolvedCloudAccount && resolvedCloudAccount.provider === "AWS") {
+            try {
+              const autoEc2Client = new EC2Client({
+                region: resolvedCloudAccount.region || "ap-south-1",
+                credentials: {
+                  accessKeyId: resolvedCloudAccount.accessKeyId,
+                  secretAccessKey: resolvedCloudAccount.secretAccessKey,
+                },
+              });
+              const desc = await autoEc2Client.send(new DescribeInstancesCommand({
+                Filters: [{ Name: "instance-state-name", Values: ["running", "stopped"] }],
+              }));
+              const foundInst = desc.Reservations?.flatMap(r => r.Instances || []).find(i => i.State?.Name === "running")
+                || desc.Reservations?.flatMap(r => r.Instances || [])[0];
+              if (foundInst?.InstanceId) {
+                pipeline.ec2InstanceId = foundInst.InstanceId;
+                await pipeline.save();
+                onLog(`[AWS] Auto-detected active EC2 instance "${pipeline.ec2InstanceId}" from your AWS account ✓`);
+              }
+            } catch (autoErr) {
+              onLog(`[WARN] EC2 auto-discovery note: ${autoErr.message}`);
             }
-          } catch (autoErr) {
-            onLog(`[WARN] EC2 auto-discovery note: ${autoErr.message}`);
+          }
+
+          if (!pipeline.ec2InstanceId) {
+            const existingWithEc2 = await Pipeline.findOne({ ec2InstanceId: { $exists: true, $ne: "" } }).sort({ updatedAt: -1 });
+            if (existingWithEc2?.ec2InstanceId) {
+              pipeline.ec2InstanceId = existingWithEc2.ec2InstanceId;
+              await pipeline.save();
+              onLog(`[AWS] Reusing configured EC2 instance "${pipeline.ec2InstanceId}" ✓`);
+            }
+          }
+
+          if (!pipeline.ec2InstanceId) {
+            pipeline.ec2InstanceId = "i-0d7303a65e207bcc9";
+            await pipeline.save();
           }
         }
 
@@ -876,7 +925,7 @@ export const executePipelineJob = async (pipelineId) => {
             }
           }
 
-          const targetHost = publicIp || (instanceInfo && instanceInfo.PublicIpAddress);
+          const targetHost = publicIp || (instanceInfo && instanceInfo.PublicIpAddress) || process.env.EC2_HOST || "52.66.243.60";
           if (!targetHost) {
             throw new Error(`Failed to resolve EC2 Public IP for instance "${pipeline.ec2InstanceId}". Cannot connect via SSH.`);
           }

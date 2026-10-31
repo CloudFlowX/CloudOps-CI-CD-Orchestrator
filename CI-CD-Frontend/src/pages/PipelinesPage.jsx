@@ -38,7 +38,8 @@ import {
   ShieldAlert,
   Copy,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Server
 } from 'lucide-react';
 
 import ApiClient from '../utils/api';
@@ -1942,20 +1943,9 @@ export default function PipelinesPage() {
                     </div>
 
                     {newPipeline.cloudAccount && (
-                      <div className="form-group">
-                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional - Auto Detected)</span></label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="Auto-detect from AWS (or enter i-xxxxxx)"
-                          value={newPipeline.ec2InstanceId || ''}
-                          onChange={(e) =>
-                            setNewPipeline({ ...newPipeline, ec2InstanceId: e.target.value })
-                          }
-                        />
-                        <span className="field-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                          Leave blank — CloudOps will automatically detect your active EC2 instance.
-                        </span>
+                      <div className="ec2-autodetect-badge">
+                        <Server size={15} />
+                        <span><strong>Smart EC2 Auto-Detect:</strong> CloudOps will automatically discover and run on your active EC2 instance.</span>
                       </div>
                     )}
 
@@ -1981,32 +1971,24 @@ export default function PipelinesPage() {
                         ))}
                       </select>
                     </div>
-                    <div className="form-row">
-                      <div className="form-group flex-2">
-                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional)</span></label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="Auto-detect (or enter i-xxxxxx)"
-                          value={newPipeline.ec2InstanceId}
-                          onChange={(e) =>
-                            setNewPipeline({ ...newPipeline, ec2InstanceId: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="form-group flex-1">
-                        <label className="form-label">App Port</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          placeholder="e.g. 3000"
-                          value={newPipeline.appPort}
-                          onChange={(e) =>
-                            setNewPipeline({ ...newPipeline, appPort: parseInt(e.target.value) || 3000 })
-                          }
-                          required
-                        />
-                      </div>
+
+                    <div className="ec2-autodetect-badge">
+                      <Server size={15} />
+                      <span><strong>Smart EC2 Auto-Detect:</strong> CloudOps will automatically deploy to your running EC2 instance in this AWS account.</span>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">App Port</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="e.g. 5000"
+                        value={newPipeline.appPort}
+                        onChange={(e) =>
+                          setNewPipeline({ ...newPipeline, appPort: parseInt(e.target.value) || 5000 })
+                        }
+                        required
+                      />
                     </div>
                   </>
                 )}
@@ -2363,20 +2345,9 @@ export default function PipelinesPage() {
                     </div>
 
                     {editPipeline.cloudAccount && (
-                      <div className="form-group">
-                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional - Auto Detected)</span></label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="Auto-detect from AWS (or enter i-xxxxxx)"
-                          value={editPipeline.ec2InstanceId || ''}
-                          onChange={(e) =>
-                            setEditPipeline({ ...editPipeline, ec2InstanceId: e.target.value })
-                          }
-                        />
-                        <span className="field-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
-                          Leave blank — CloudOps will automatically detect your active EC2 instance.
-                        </span>
+                      <div className="ec2-autodetect-badge">
+                        <Server size={15} />
+                        <span><strong>Smart EC2 Auto-Detect:</strong> CloudOps will automatically target your active EC2 instance in this AWS account.</span>
                       </div>
                     )}
 
@@ -2402,32 +2373,24 @@ export default function PipelinesPage() {
                         ))}
                       </select>
                     </div>
-                    <div className="form-row">
-                      <div className="form-group flex-2">
-                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional)</span></label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="Auto-detect (or enter i-xxxxxx)"
-                          value={editPipeline.ec2InstanceId || ''}
-                          onChange={(e) =>
-                            setEditPipeline({ ...editPipeline, ec2InstanceId: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="form-group flex-1">
-                        <label className="form-label">App Port</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          placeholder="e.g. 3000"
-                          value={editPipeline.appPort || ''}
-                          onChange={(e) =>
-                            setEditPipeline({ ...editPipeline, appPort: parseInt(e.target.value) || 3000 })
-                          }
-                          required
-                        />
-                      </div>
+
+                    <div className="ec2-autodetect-badge">
+                      <Server size={15} />
+                      <span><strong>Smart EC2 Auto-Detect:</strong> CloudOps will automatically deploy to your running EC2 instance in this AWS account.</span>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">App Port</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="e.g. 5000"
+                        value={editPipeline.appPort || ''}
+                        onChange={(e) =>
+                          setEditPipeline({ ...editPipeline, appPort: parseInt(e.target.value) || 5000 })
+                        }
+                        required
+                      />
                     </div>
                   </>
                 )}
