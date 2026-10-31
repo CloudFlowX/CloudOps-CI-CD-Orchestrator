@@ -1943,16 +1943,19 @@ export default function PipelinesPage() {
 
                     {newPipeline.cloudAccount && (
                       <div className="form-group">
-                        <label className="form-label">EC2 Instance ID</label>
+                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional - Auto Detected)</span></label>
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="e.g. i-0d7303a65e207bcc9"
+                          placeholder="Auto-detect from AWS (or enter i-xxxxxx)"
                           value={newPipeline.ec2InstanceId || ''}
                           onChange={(e) =>
                             setNewPipeline({ ...newPipeline, ec2InstanceId: e.target.value })
                           }
                         />
+                        <span className="field-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                          Leave blank — CloudOps will automatically detect your active EC2 instance.
+                        </span>
                       </div>
                     )}
 
@@ -1980,16 +1983,15 @@ export default function PipelinesPage() {
                     </div>
                     <div className="form-row">
                       <div className="form-group flex-2">
-                        <label className="form-label">EC2 Instance ID</label>
+                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional)</span></label>
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="e.g. i-0abcd1234efgh5678"
+                          placeholder="Auto-detect (or enter i-xxxxxx)"
                           value={newPipeline.ec2InstanceId}
                           onChange={(e) =>
                             setNewPipeline({ ...newPipeline, ec2InstanceId: e.target.value })
                           }
-                          required
                         />
                       </div>
                       <div className="form-group flex-1">
@@ -2362,16 +2364,19 @@ export default function PipelinesPage() {
 
                     {editPipeline.cloudAccount && (
                       <div className="form-group">
-                        <label className="form-label">EC2 Instance ID</label>
+                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional - Auto Detected)</span></label>
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="e.g. i-0d7303a65e207bcc9"
+                          placeholder="Auto-detect from AWS (or enter i-xxxxxx)"
                           value={editPipeline.ec2InstanceId || ''}
                           onChange={(e) =>
                             setEditPipeline({ ...editPipeline, ec2InstanceId: e.target.value })
                           }
                         />
+                        <span className="field-hint" style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                          Leave blank — CloudOps will automatically detect your active EC2 instance.
+                        </span>
                       </div>
                     )}
 
@@ -2399,16 +2404,15 @@ export default function PipelinesPage() {
                     </div>
                     <div className="form-row">
                       <div className="form-group flex-2">
-                        <label className="form-label">EC2 Instance ID</label>
+                        <label className="form-label">EC2 Instance ID <span className="text-muted" style={{ fontWeight: 400, fontSize: '11px' }}>(Optional)</span></label>
                         <input
                           type="text"
                           className="form-input"
-                          placeholder="e.g. i-0abcd1234efgh5678"
+                          placeholder="Auto-detect (or enter i-xxxxxx)"
                           value={editPipeline.ec2InstanceId || ''}
                           onChange={(e) =>
                             setEditPipeline({ ...editPipeline, ec2InstanceId: e.target.value })
                           }
-                          required
                         />
                       </div>
                       <div className="form-group flex-1">

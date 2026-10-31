@@ -5,6 +5,7 @@ import CloudAccount from "../models/cloudAccount.model.js";
 import { EC2Client, DescribeInstancesCommand, AuthorizeSecurityGroupIngressCommand, StartInstancesCommand } from "@aws-sdk/client-ec2";
 import { deployToS3AndCloudFront } from "../services/s3Deploy.service.js";
 import { deployToCloudflarePages } from "../services/cloudflareDeploy.service.js";
+import { getOrCreateCloudFrontForEc2Backend } from "../services/ec2CloudFront.service.js";
 import {
   ensureDockerfile,
   generateDockerfileContent,
@@ -97,6 +98,15 @@ export const createPipeline = async (req, res) => {
       finalVisibility = "private"; // Non-admins cannot create admin_only pipelines
     }
 
+    // Auto-resolve EC2 instance ID if not provided for AWS/Docker targets
+    let resolvedEc2InstanceId = (ec2InstanceId || "").trim();
+    if (!resolvedEc2InstanceId && (deploymentTarget === "aws" || deploymentTarget === "docker")) {
+      const existingPipelineWithEc2 = await Pipeline.findOne({ ec2InstanceId: { $ne: "" } }).sort({ updatedAt: -1 });
+      if (existingPipelineWithEc2?.ec2InstanceId) {
+        resolvedEc2InstanceId = existingPipelineWithEc2.ec2InstanceId;
+      }
+    }
+
     const pipeline = await Pipeline.create({
       name,
       repository,
@@ -107,7 +117,7 @@ export const createPipeline = async (req, res) => {
       visibility: finalVisibility,
       deploymentTarget: deploymentTarget || "cloudflare",
       cloudAccount: resolvedCloudAccount,
-      ec2InstanceId: ec2InstanceId || "",
+      ec2InstanceId: resolvedEc2InstanceId,
       appPort: resolvedPort,
       containerPort: resolvedPort,
       envVars: cleanEnvVars,
@@ -756,6 +766,31 @@ export const executePipelineJob = async (pipelineId) => {
           }
         }
 
+        // Auto-detect EC2 instance if not explicitly set on this pipeline
+        if (!pipeline.ec2InstanceId && resolvedCloudAccount && resolvedCloudAccount.provider === "AWS") {
+          try {
+            const autoEc2Client = new EC2Client({
+              region: resolvedCloudAccount.region || "ap-south-1",
+              credentials: {
+                accessKeyId: resolvedCloudAccount.accessKeyId,
+                secretAccessKey: resolvedCloudAccount.secretAccessKey,
+              },
+            });
+            const desc = await autoEc2Client.send(new DescribeInstancesCommand({
+              Filters: [{ Name: "instance-state-name", Values: ["running", "stopped"] }],
+            }));
+            const foundInst = desc.Reservations?.flatMap(r => r.Instances || []).find(i => i.State?.Name === "running")
+              || desc.Reservations?.flatMap(r => r.Instances || [])[0];
+            if (foundInst?.InstanceId) {
+              pipeline.ec2InstanceId = foundInst.InstanceId;
+              await pipeline.save();
+              onLog(`[AWS] Auto-detected active EC2 instance "${pipeline.ec2InstanceId}" from your AWS account ✓`);
+            }
+          } catch (autoErr) {
+            onLog(`[WARN] EC2 auto-discovery note: ${autoErr.message}`);
+          }
+        }
+
         const hasEc2Config = !!(pipeline.ec2InstanceId || (resolvedCloudAccount && pipeline.ec2InstanceId));
 
         if (hasEc2Config) {
@@ -900,9 +935,40 @@ export const executePipelineJob = async (pipelineId) => {
             pipeline.containerId = remoteResult.containerId;
             await pipeline.save();
 
+            // Configure / reuse AWS CloudFront HTTPS Distribution for this EC2 backend
+            if (resolvedCloudAccount && resolvedCloudAccount.provider === "AWS") {
+              try {
+                onLog(`[CLOUDFRONT] Configuring AWS CloudFront HTTPS for backend API...`);
+                const cfResult = await getOrCreateCloudFrontForEc2Backend({
+                  credentials: {
+                    accessKeyId: resolvedCloudAccount.accessKeyId,
+                    secretAccessKey: resolvedCloudAccount.secretAccessKey,
+                  },
+                  region: resolvedCloudAccount.region || "ap-south-1",
+                  publicIp: targetHost,
+                  publicDnsName: instanceInfo?.PublicDnsName,
+                  port: targetPort,
+                  repoName,
+                  onLog,
+                });
+
+                if (cfResult?.cloudFrontUrl) {
+                  pipeline.cloudFrontUrl = cfResult.cloudFrontUrl;
+                  pipeline.deployedUrl = cfResult.cloudFrontUrl;
+                  await pipeline.save();
+                  onLog(`[CLOUDFRONT] 🎉 CloudFront HTTPS Active: ${pipeline.deployedUrl}`);
+                }
+              } catch (cfErr) {
+                onLog(`[WARN] CloudFront integration: ${cfErr.message}`);
+              }
+            }
+
             onLog(`[DEPLOY] ====================================================`);
             onLog(`[DEPLOY] 🎉 EC2 DOCKER BACKEND CONTAINER LIVE!`);
             onLog(`[DEPLOY] Public API URL: ${pipeline.deployedUrl}`);
+            if (pipeline.cloudFrontUrl) {
+              onLog(`[DEPLOY] CloudFront HTTPS URL: ${pipeline.cloudFrontUrl}`);
+            }
             onLog(`[DEPLOY] ====================================================`);
           } finally {
             ssh.dispose();

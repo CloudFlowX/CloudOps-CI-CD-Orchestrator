@@ -2001,3 +2001,138 @@
   font-size: 0.85rem !important;
 }
 
+/* AWS CloudFront Instant HTTPS Card */
+.cloudfront-instant-card {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem 1.75rem;
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.06), rgba(15, 23, 42, 0.7));
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.cf-card-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex: 1;
+}
+
+.cf-badge-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cf-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cf-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cf-card-title-row h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.badge-active-cf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.badge-ready-cf {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  color: #facc15;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.live-dot-green {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.cf-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.cf-card-desc code {
+  color: #facc15;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.cf-live-url-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 10px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.cf-live-url-display a {
+  color: #38bdf8;
+  font-size: 0.85rem;
+  font-family: monospace;
+  text-decoration: none;
+}
+
+.cf-live-url-display a:hover {
+  text-decoration: underline;
+}
+
+.btn-yellow-action {
+  background: linear-gradient(135deg, #eab308, #ca8a04) !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px rgba(234, 179, 8, 0.35) !important;
+}
+
+.btn-yellow-action:hover {
+  background: linear-gradient(135deg, #facc15, #eab308) !important;
+  box-shadow: 0 6px 20px rgba(234, 179, 8, 0.5) !important;
+  transform: translateY(-1px);
+}
+

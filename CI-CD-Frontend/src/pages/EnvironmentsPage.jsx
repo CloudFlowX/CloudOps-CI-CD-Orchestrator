@@ -57,6 +57,7 @@ export default function EnvironmentsPage() {
   const [dnsVerifying, setDnsVerifying] = useState(false);
   const [dnsResult, setDnsResult] = useState(null);
   const [cfSettingUp, setCfSettingUp] = useState(false);
+  const [cfGenerating, setCfGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -413,6 +414,26 @@ export default function EnvironmentsPage() {
     }
   };
 
+  // Generate / Connect AWS CloudFront HTTPS for Pipeline
+  const handleEnableCloudFront = async () => {
+    if (!currentPipeline) return;
+    try {
+      setCfGenerating(true);
+      const res = await api.post(`/dns/${currentPipeline._id}/cloudfront`);
+      if (res.success) {
+        showToast(res.message || 'AWS CloudFront HTTPS URL generated successfully! ✓', 'success');
+        fetchDnsDetails(currentPipeline._id);
+        fetchData();
+      } else {
+        showToast(res.message || 'CloudFront generation failed', 'error');
+      }
+    } catch (err) {
+      showToast(err.message || 'AWS CloudFront generation failed', 'error');
+    } finally {
+      setCfGenerating(false);
+    }
+  };
+
   return (
     <div className="environments-container">
       {/* Toast Notification */}
@@ -683,6 +704,63 @@ export default function EnvironmentsPage() {
             </div>
           </div>
 
+          {/* AWS CloudFront Instant HTTPS Card */}
+          <div className="glass-card cloudfront-instant-card">
+            <div className="cf-card-left">
+              <div className="cf-badge-icon">
+                <Zap size={22} className="text-yellow" />
+              </div>
+              <div className="cf-card-info">
+                <div className="cf-card-title-row">
+                  <h3>AWS CloudFront Instant HTTPS</h3>
+                  {currentPipeline?.cloudFrontUrl ? (
+                    <span className="badge-active-cf">
+                      <span className="live-dot-green"></span>
+                      <span>HTTPS Live</span>
+                    </span>
+                  ) : (
+                    <span className="badge-ready-cf">Ready to Connect</span>
+                  )}
+                </div>
+                <p className="cf-card-desc">
+                  Permanent secure HTTPS endpoint (<code>https://*.cloudfront.net</code>) with no port numbers (:5000) and zero configuration.
+                </p>
+                {currentPipeline?.cloudFrontUrl && (
+                  <div className="cf-live-url-display">
+                    <ExternalLink size={14} className="text-cyan" />
+                    <a href={currentPipeline.cloudFrontUrl} target="_blank" rel="noreferrer">
+                      {currentPipeline.cloudFrontUrl}
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="cf-card-right">
+              {currentPipeline?.cloudFrontUrl ? (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentPipeline.cloudFrontUrl);
+                    showToast('CloudFront URL copied to clipboard!', 'success');
+                  }}
+                >
+                  <Copy size={14} />
+                  <span>Copy HTTPS URL</span>
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary btn-sm btn-yellow-action"
+                  onClick={handleEnableCloudFront}
+                  disabled={cfGenerating}
+                >
+                  <Zap size={14} />
+                  <span>{cfGenerating ? 'Setting up CloudFront...' : '1-Click CloudFront HTTPS'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Domain Attachment Card */}
           <div className="glass-card dns-manager-card">
             <div className="card-top-title">
@@ -812,6 +890,16 @@ export default function EnvironmentsPage() {
                   >
                     <Cloud size={15} className="text-orange" />
                     <span>{cfSettingUp ? 'Configuring Cloudflare...' : '1-Click Cloudflare DNS Setup'}</span>
+                  </button>
+
+                  <button
+                    className="btn btn-secondary btn-cf"
+                    onClick={handleEnableCloudFront}
+                    disabled={cfGenerating}
+                    title="Generate or reuse AWS CloudFront HTTPS Distribution for this backend"
+                  >
+                    <Zap size={15} className="text-yellow" />
+                    <span>{cfGenerating ? 'Setting up CloudFront...' : '1-Click CloudFront HTTPS'}</span>
                   </button>
                 </div>
               </div>

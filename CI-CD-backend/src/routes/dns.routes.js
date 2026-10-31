@@ -6,6 +6,7 @@ import {
   attachCustomDomain,
   verifyCustomDomain,
   autoSetupCloudflareDns,
+  generateCloudFrontForPipeline,
 } from "../controllers/dns.controller.js";
 
 const router = express.Router();
@@ -28,5 +29,9 @@ router
 router
   .route("/:pipelineId/cloudflare-auto")
   .post(authorize("admin", "developer"), autoSetupCloudflareDns);
+
+router
+  .route("/:pipelineId/cloudfront")
+  .post(authorize("admin", "developer"), generateCloudFrontForPipeline);
 
 export default router;

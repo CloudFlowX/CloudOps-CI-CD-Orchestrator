@@ -7,6 +7,7 @@ import logger from "../config/logger.js";
 import Pipeline from "../models/pipeline.model.js";
 import CloudAccount from "../models/cloudAccount.model.js";
 import AuditLog from "../models/auditLog.model.js";
+import { getOrCreateCloudFrontForEc2Backend } from "../services/ec2CloudFront.service.js";
 
 /**
  * Extract root domain and subdomain from hostname
@@ -460,5 +461,92 @@ export const autoSetupCloudflareDns = async (req, res) => {
     logger.error("CLOUDFLARE DNS ERROR:", error.response?.data || error.message);
     const errMsg = error.response?.data?.errors?.[0]?.message || error.message;
     return res.status(500).json({ success: false, message: `Cloudflare API error: ${errMsg}` });
+  }
+};
+
+// ======================================
+// Enable / Generate AWS CloudFront HTTPS for Pipeline
+// ======================================
+export const generateCloudFrontForPipeline = async (req, res) => {
+  try {
+    const { pipelineId } = req.params;
+    const pipeline = await Pipeline.findById(pipelineId).populate("repository", "name");
+
+    if (!pipeline) {
+      return res.status(404).json({ success: false, message: "Pipeline not found." });
+    }
+
+    let resolvedCloudAccount = null;
+    if (pipeline.cloudAccount) {
+      resolvedCloudAccount = await CloudAccount.findById(pipeline.cloudAccount);
+    }
+    if (!resolvedCloudAccount && pipeline.createdBy) {
+      resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS", owner: pipeline.createdBy });
+    }
+    if (!resolvedCloudAccount) {
+      resolvedCloudAccount = await CloudAccount.findOne({ provider: "AWS" });
+    }
+
+    if (!resolvedCloudAccount?.accessKeyId || !resolvedCloudAccount?.secretAccessKey) {
+      return res.status(400).json({
+        success: false,
+        message: "No connected AWS Cloud Account found. Please connect your AWS account in Cloud Accounts.",
+      });
+    }
+
+    let targetHost = "52.66.243.60";
+    let targetPort = pipeline.containerPort || pipeline.appPort || 5000;
+    let publicDns = null;
+
+    if (pipeline.ec2InstanceId) {
+      try {
+        const ec2 = new EC2Client({
+          region: resolvedCloudAccount.region || "ap-south-1",
+          credentials: {
+            accessKeyId: resolvedCloudAccount.accessKeyId,
+            secretAccessKey: resolvedCloudAccount.secretAccessKey,
+          },
+        });
+        const d = await ec2.send(new DescribeInstancesCommand({ InstanceIds: [pipeline.ec2InstanceId] }));
+        const inst = d.Reservations?.[0]?.Instances?.[0];
+        if (inst?.PublicIpAddress) targetHost = inst.PublicIpAddress;
+        if (inst?.PublicDnsName) publicDns = inst.PublicDnsName;
+      } catch (e) {
+        logger.warn(`Could not resolve EC2 info: ${e.message}`);
+      }
+    }
+
+    const cfResult = await getOrCreateCloudFrontForEc2Backend({
+      credentials: {
+        accessKeyId: resolvedCloudAccount.accessKeyId,
+        secretAccessKey: resolvedCloudAccount.secretAccessKey,
+      },
+      region: resolvedCloudAccount.region || "ap-south-1",
+      publicIp: targetHost,
+      publicDnsName: publicDns,
+      port: targetPort,
+      repoName: pipeline.repository?.name || pipeline.name,
+      onLog: (msg) => logger.info(msg),
+    });
+
+    if (cfResult?.cloudFrontUrl) {
+      pipeline.cloudFrontUrl = cfResult.cloudFrontUrl;
+      pipeline.deployedUrl = cfResult.cloudFrontUrl;
+      await pipeline.save();
+
+      return res.status(200).json({
+        success: true,
+        cloudFrontUrl: cfResult.cloudFrontUrl,
+        message: `🎉 AWS CloudFront HTTPS Distribution assigned: ${cfResult.cloudFrontUrl}`,
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Could not create CloudFront distribution. Please check AWS IAM permissions for CloudFront.",
+      });
+    }
+  } catch (err) {
+    logger.error("CloudFront generation error:", err);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
