@@ -18,7 +18,10 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
-  Briefcase
+  Briefcase,
+  Copy,
+  CheckCheck,
+  AlertCircle
 } from 'lucide-react';
 import './UsersPage.css';
 import ApiClient from '../utils/api';
@@ -34,20 +37,25 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       const res = await ApiClient.get('/users');
-      if (res.success) {
+      if (res && res.success && Array.isArray(res.users)) {
         const mappedUsers = res.users.map(u => {
-          const initials = u.fullName.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+          const nameTrimmed = (u.fullName || '').trim();
+          const initials = nameTrimmed
+            ? (nameTrimmed.split(/\s+/).length > 1
+                ? (nameTrimmed.split(/\s+/)[0][0] + nameTrimmed.split(/\s+/)[1][0]).toUpperCase()
+                : nameTrimmed.substring(0, 2).toUpperCase())
+            : 'U';
           let color = '#64748b';
           if (u.role === 'admin') color = '#a855f7';
           else if (u.role === 'developer') color = '#3b82f6';
           
           return {
             id: u._id,
-            name: u.fullName,
+            name: u.fullName || 'User',
             email: u.email,
-            role: u.role.charAt(0).toUpperCase() + u.role.slice(1),
+            role: u.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1).toLowerCase()) : 'Developer',
             status: u.isVerified ? 'Active' : 'Pending',
-            lastActive: new Date(u.updatedAt).toLocaleDateString(),
+            lastActive: u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : 'Recent',
             teams: [],
             initials: initials,
             color: color
@@ -57,7 +65,7 @@ export default function UsersPage() {
       }
     } catch (err) {
       console.error(err);
-      showNotification('Failed to fetch users');
+      showNotification('Failed to fetch users', 'error');
     }
   };
   
@@ -72,7 +80,11 @@ export default function UsersPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [activeUser, setActiveUser] = useState(null);
 
-  // Invite Form State
+  // Invite Form & Process State
+  const [isInviting, setIsInviting] = useState(false);
+  const [inviteFeedback, setInviteFeedback] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
+
   const [inviteForm, setInviteForm] = useState({
     name: '',
     email: '',
@@ -92,11 +104,17 @@ export default function UsersPage() {
   // Action Notification State
   const [toastMessage, setToastMessage] = useState(null);
 
-  const showNotification = (msg) => {
-    setToastMessage(msg);
+  const showNotification = (msg, type = 'success') => {
+    setToastMessage({ text: msg, type });
     setTimeout(() => {
       setToastMessage(null);
-    }, 3000);
+    }, 4500);
+  };
+
+  const copyToClipboard = (text, field) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   // Derived Statistics
@@ -126,37 +144,46 @@ export default function UsersPage() {
   }, [users, searchQuery, roleFilter, statusFilter]);
 
   // Handlers for Invite
-  const handleInviteSubmit = (e) => {
+  const handleInviteSubmit = async (e) => {
     e.preventDefault();
-    if (!inviteForm.name || !inviteForm.email) return;
+    if (!inviteForm.name.trim() || !inviteForm.email.trim()) return;
 
-    const initials = inviteForm.name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2) || 'U';
+    setIsInviting(true);
+    try {
+      const res = await ApiClient.post('/users/invite', {
+        fullName: inviteForm.name.trim(),
+        email: inviteForm.email.trim(),
+        role: inviteForm.role.toLowerCase()
+      });
 
-    let color = '#3b82f6';
-    if (inviteForm.role === 'Admin') color = '#a855f7';
-    if (inviteForm.role === 'Viewer') color = '#64748b';
+      if (res && res.success) {
+        setIsInviteModalOpen(false);
+        setInviteForm({ name: '', email: '', role: 'Developer', teams: [] });
+        await fetchUsers();
 
-    const newUser = {
-      id: Date.now(),
-      name: inviteForm.name,
-      email: inviteForm.email,
-      role: inviteForm.role,
-      status: 'Active',
-      lastActive: 'Just now',
-      teams: inviteForm.teams,
-      initials: initials,
-      color: color
-    };
+        setInviteFeedback({
+          name: res.user?.fullName || inviteForm.name,
+          email: res.user?.email || inviteForm.email,
+          role: res.user?.role || inviteForm.role,
+          emailSent: res.emailSent,
+          emailError: res.emailError,
+          tempPassword: res.tempPassword,
+          inviteUrl: res.inviteUrl
+        });
 
-    setUsers([newUser, ...users]);
-    setIsInviteModalOpen(false);
-    setInviteForm({ name: '', email: '', role: 'Developer', teams: [] });
-    showNotification(`Invitation sent to ${newUser.email}`);
+        if (res.emailSent) {
+          showNotification(`Invitation email sent to ${res.user?.email || inviteForm.email}`, 'success');
+        } else {
+          showNotification(`User invited! See delivery details on screen.`, 'warning');
+        }
+      } else {
+        showNotification(res?.message || 'Failed to send invitation', 'error');
+      }
+    } catch (err) {
+      showNotification(err.message || 'Error sending invitation', 'error');
+    } finally {
+      setIsInviting(false);
+    }
   };
 
   // Handlers for Edit
@@ -250,9 +277,15 @@ export default function UsersPage() {
     <div className="users-page-container animate-fade-in">
       {/* Notification Toast */}
       {toastMessage && (
-        <div className="users-toast">
-          <Check className="toast-icon" />
-          <span>{toastMessage}</span>
+        <div className={`users-toast ${toastMessage.type || 'success'}`}>
+          {toastMessage.type === 'error' ? (
+            <X className="toast-icon" />
+          ) : toastMessage.type === 'warning' ? (
+            <AlertCircle className="toast-icon" />
+          ) : (
+            <Check className="toast-icon" />
+          )}
+          <span>{typeof toastMessage === 'string' ? toastMessage : toastMessage.text}</span>
         </div>
       )}
 
@@ -506,7 +539,7 @@ export default function UsersPage() {
 
       {/* MODAL 1: INVITE USER */}
       {isInviteModalOpen && (
-        <div className="modal-backdrop" onClick={() => setIsInviteModalOpen(false)}>
+        <div className="modal-backdrop" onClick={() => !isInviting && setIsInviteModalOpen(false)}>
           <div className="modal-container glass-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-header-title">
@@ -515,7 +548,8 @@ export default function UsersPage() {
               </div>
               <button
                 className="btn-close-modal"
-                onClick={() => setIsInviteModalOpen(false)}
+                onClick={() => !isInviting && setIsInviteModalOpen(false)}
+                disabled={isInviting}
               >
                 <X />
               </button>
@@ -533,6 +567,7 @@ export default function UsersPage() {
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, name: e.target.value })
                   }
+                  disabled={isInviting}
                 />
               </div>
 
@@ -547,6 +582,7 @@ export default function UsersPage() {
                   onChange={(e) =>
                     setInviteForm({ ...inviteForm, email: e.target.value })
                   }
+                  disabled={isInviting}
                 />
               </div>
 
@@ -568,6 +604,7 @@ export default function UsersPage() {
                         onChange={(e) =>
                           setInviteForm({ ...inviteForm, role: e.target.value })
                         }
+                        disabled={isInviting}
                       />
                       <span className="role-option-label">{r}</span>
                     </label>
@@ -575,20 +612,129 @@ export default function UsersPage() {
                 </div>
               </div>
 
-
               <div className="modal-footer">
                 <button
                   type="button"
                   className="btn-modal-cancel"
                   onClick={() => setIsInviteModalOpen(false)}
+                  disabled={isInviting}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-modal-submit">
-                  Send Invitation
+                <button type="submit" className="btn-modal-submit" disabled={isInviting}>
+                  {isInviting ? 'Sending Invitation...' : 'Send Invitation'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: INVITATION FEEDBACK & CREDENTIALS */}
+      {inviteFeedback && (
+        <div className="modal-backdrop" onClick={() => setInviteFeedback(null)}>
+          <div className="modal-container glass-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-header-title">
+                {inviteFeedback.emailSent ? (
+                  <Check className="modal-title-icon" style={{ color: 'var(--accent-green)' }} />
+                ) : (
+                  <AlertCircle className="modal-title-icon" style={{ color: '#f59e0b' }} />
+                )}
+                <h3>
+                  {inviteFeedback.emailSent
+                    ? 'Invitation Sent!'
+                    : 'User Created (Email Notice)'}
+                </h3>
+              </div>
+              <button
+                className="btn-close-modal"
+                onClick={() => setInviteFeedback(null)}
+              >
+                <X />
+              </button>
+            </div>
+
+            <div className="modal-body invite-feedback-body">
+              {inviteFeedback.emailSent ? (
+                <div className="feedback-banner success">
+                  <Check size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <strong>Email Delivered!</strong> An official invitation email has been sent via Resend to{' '}
+                    <strong>{inviteFeedback.email}</strong> with full instructions to set their password.
+                  </div>
+                </div>
+              ) : (
+                <div className="feedback-banner warning">
+                  <AlertCircle size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div>
+                    <strong>User account created!</strong>
+                    <div style={{ marginTop: 4, fontSize: '12px' }}>
+                      Resend free testing mode only sends emails to <code>royalkhurana1@gmail.com</code> unless your custom domain is verified at Resend.
+                    </div>
+                    <div style={{ marginTop: 4, fontSize: '12px', opacity: 0.9 }}>
+                      You can copy the direct activation link or temporary credentials below to share with <strong>{inviteFeedback.name}</strong>.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="feedback-creds-container">
+                <div className="feedback-row">
+                  <span className="feedback-label">Invited User</span>
+                  <div style={{ fontSize: '13px', color: '#f8fafc' }}>
+                    {inviteFeedback.name} ({inviteFeedback.email}) &bull;{' '}
+                    <span style={{ textTransform: 'capitalize', color: 'var(--accent-blue)', fontWeight: 600 }}>
+                      {inviteFeedback.role}
+                    </span>
+                  </div>
+                </div>
+
+                {inviteFeedback.inviteUrl && (
+                  <div className="feedback-row">
+                    <span className="feedback-label">Direct Activation / Password Link</span>
+                    <div className="feedback-val-group">
+                      <div className="feedback-code">{inviteFeedback.inviteUrl}</div>
+                      <button
+                        type="button"
+                        className="btn-copy-code"
+                        onClick={() => copyToClipboard(inviteFeedback.inviteUrl, 'link')}
+                      >
+                        {copiedField === 'link' ? <CheckCheck size={14} /> : <Copy size={14} />}
+                        {copiedField === 'link' ? 'Copied' : 'Copy Link'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {inviteFeedback.tempPassword && (
+                  <div className="feedback-row">
+                    <span className="feedback-label">Temporary Password</span>
+                    <div className="feedback-val-group">
+                      <div className="feedback-code">{inviteFeedback.tempPassword}</div>
+                      <button
+                        type="button"
+                        className="btn-copy-code"
+                        onClick={() => copyToClipboard(inviteFeedback.tempPassword, 'pass')}
+                      >
+                        {copiedField === 'pass' ? <CheckCheck size={14} /> : <Copy size={14} />}
+                        {copiedField === 'pass' ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn-modal-submit"
+                  onClick={() => setInviteFeedback(null)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

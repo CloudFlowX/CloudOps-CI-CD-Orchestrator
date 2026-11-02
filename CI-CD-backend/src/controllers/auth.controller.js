@@ -208,6 +208,7 @@ export const resetPassword = async (req, res) => {
 
     // Set new password
     user.password = req.body.password;
+    user.isVerified = true;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
 
