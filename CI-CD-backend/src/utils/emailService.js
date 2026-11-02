@@ -19,16 +19,26 @@ export const sendEmail = async ({ to, subject, html, text }) => {
   // Strategy 1: SMTP / Gmail (Can send to ANY email address in the world)
   if (smtpHost && smtpUser && smtpPass) {
     try {
-      const port = Number(process.env.SMTP_PORT) || 465;
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port,
-        secure: port === 465,
-        auth: {
-          user: smtpUser,
-          pass: smtpPass,
-        },
-      });
+      const isGmail = smtpUser.includes("@gmail.com") || smtpHost === "smtp.gmail.com";
+      const transporter = nodemailer.createTransport(
+        isGmail
+          ? {
+              service: "gmail",
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            }
+          : {
+              host: smtpHost,
+              port: Number(process.env.SMTP_PORT) || 465,
+              secure: Number(process.env.SMTP_PORT) === 465 || !process.env.SMTP_PORT,
+              auth: {
+                user: smtpUser,
+                pass: smtpPass,
+              },
+            }
+      );
 
       const fromAddress = process.env.EMAIL_FROM || `CloudOps <${smtpUser}>`;
       const info = await transporter.sendMail({
