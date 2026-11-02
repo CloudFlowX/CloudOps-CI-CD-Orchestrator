@@ -103,7 +103,7 @@ function AppContent() {
     <Routes>
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       
-      {/* Auth Routes (Guest Only) */}
+      {/* Auth Routes */}
       <Route path="/login" element={
         <GuestGuard>
           <LoginPage />
@@ -114,16 +114,8 @@ function AppContent() {
           <RegisterPage />
         </GuestGuard>
       } />
-      <Route path="/forgot-password" element={
-        <GuestGuard>
-          <ForgotPasswordPage />
-        </GuestGuard>
-      } />
-      <Route path="/reset-password/:token" element={
-        <GuestGuard>
-          <ResetPasswordPage />
-        </GuestGuard>
-      } />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 
       {/* Protected App Routes */}
       <Route path="/*" element={

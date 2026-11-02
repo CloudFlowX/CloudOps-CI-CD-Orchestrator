@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Lock, Eye, EyeOff, ShieldCheck, Zap, Mail, Quote, ArrowRight } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import ApiClient from '../utils/api';
 import './LoginPage.css';
 
@@ -11,6 +12,7 @@ import archiImg from '../assets/archi.png';
 function ResetPasswordPage() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const { logout } = useAuth();
   
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,6 +39,7 @@ function ResetPasswordPage() {
     try {
       const res = await ApiClient.post(`/auth/reset-password/${token}`, { password });
       if (res.success) {
+        if (logout) logout();
         setSuccess(true);
         setTimeout(() => {
           navigate('/login');
