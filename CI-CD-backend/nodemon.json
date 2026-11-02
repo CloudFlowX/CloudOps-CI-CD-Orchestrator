@@ -1,6 +1,7 @@
 {
   "watch": [
-    "src"
+    "src",
+    ".env"
   ],
   "ignore": [
     "workspace",
@@ -8,5 +9,5 @@
     "cloud-workspace",
     ".git"
   ],
-  "ext": "js,json"
+  "ext": "js,json,env"
 }
