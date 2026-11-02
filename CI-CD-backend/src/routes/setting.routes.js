@@ -1,5 +1,9 @@
 import express from "express";
-import { getSettings, updateSettings } from "../controllers/setting.controller.js";
+import {
+  getSettings,
+  updateSettings,
+  testSlackWebhook,
+} from "../controllers/setting.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import { authorize } from "../middleware/role.middleware.js";
 
@@ -11,5 +15,7 @@ router
   .route("/")
   .get(getSettings)
   .put(authorize("admin", "developer"), updateSettings);
+
+router.post("/test-slack", testSlackWebhook);
 
 export default router;
