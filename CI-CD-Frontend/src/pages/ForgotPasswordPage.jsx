@@ -15,6 +15,8 @@ function ForgotPasswordPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [deliveryInfo, setDeliveryInfo] = useState(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,9 +24,11 @@ function ForgotPasswordPage() {
     
     setIsLoading(true);
     setLocalError('');
+    setDeliveryInfo(null);
     try {
       const res = await ApiClient.post('/auth/forgot-password', { email });
       if (res.success) {
+        setDeliveryInfo(res);
         setIsSubmitted(true);
       }
     } catch (err) {
@@ -132,17 +136,59 @@ function ForgotPasswordPage() {
             )}
 
             {isSubmitted ? (
-              <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px' }}>✓</div>
-                <h3 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Check your email</h3>
-                <p style={{ color: '#94A3B8', fontSize: '13px', lineHeight: '1.5', marginBottom: '20px' }}>
-                  We've sent a password reset link to <strong>{email}</strong>.
-                </p>
+              deliveryInfo && deliveryInfo.emailSent === false ? (
+                <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', fontSize: '22px' }}>!</div>
+                  <h3 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Reset Link Generated</h3>
+                  
+                  <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '12px', textAlign: 'left', marginBottom: '16px', fontSize: '12px', color: '#FCD34D', lineHeight: '1.5' }}>
+                    <strong>Notice:</strong> Resend Free Tier (<code>onboarding@resend.dev</code>) only delivers test emails to <strong>royalkhurana1@gmail.com</strong>.
+                    <br />
+                    Since this request is for <strong>{email}</strong>, you can use the direct reset link below to proceed immediately!
+                  </div>
 
-                <button type="button" className="submit-btn" onClick={() => setIsSubmitted(false)}>
-                  Send again
-                </button>
-              </div>
+                  {deliveryInfo.resetUrl && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <a
+                        href={deliveryInfo.resetUrl}
+                        className="submit-btn"
+                        style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', marginBottom: '10px' }}
+                      >
+                        Reset Password Now &rarr;
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(deliveryInfo.resetUrl);
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2000);
+                        }}
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#94A3B8', padding: '8px 16px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', width: '100%' }}
+                      >
+                        {copiedLink ? '✓ Copied Link' : 'Copy Reset Link'}
+                      </button>
+                    </div>
+                  )}
+
+                  <div style={{ textAlign: 'center', marginTop: '12px' }}>
+                    <button type="button" style={{ background: 'transparent', border: 'none', color: '#64748B', fontSize: '12px', cursor: 'pointer' }} onClick={() => setIsSubmitted(false)}>
+                      Try another email
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '24px' }}>✓</div>
+                  <h3 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Check your email</h3>
+                  <p style={{ color: '#94A3B8', fontSize: '13px', lineHeight: '1.5', marginBottom: '20px' }}>
+                    We've sent a password reset link to <strong>{email}</strong>.
+                  </p>
+
+                  <button type="button" className="submit-btn" onClick={() => setIsSubmitted(false)}>
+                    Send again
+                  </button>
+                </div>
+              )
             ) : (
               <form className="auth-form" onSubmit={handleSubmit}>
                 <div className="form-group" style={{ marginBottom: '24px' }}>

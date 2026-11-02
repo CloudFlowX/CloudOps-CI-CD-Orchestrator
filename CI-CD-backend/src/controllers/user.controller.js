@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { Resend } from "resend";
+import { sendEmail } from "../utils/emailService.js";
 import User from "../models/user.model.js";
 import logger from "../config/logger.js";
 import { createAuditLog } from "./auditLog.controller.js";
@@ -249,33 +249,14 @@ export const inviteUser = async (req, res) => {
       </html>
     `;
 
-    let emailSent = false;
-    let emailErrorMessage = null;
+    const emailResult = await sendEmail({
+      to: normalizedEmail,
+      subject: `You've been invited to CloudOps Orchestrator as ${assignedRole.toUpperCase()}`,
+      html: emailHtml,
+    });
 
-    if (process.env.RESEND_API_KEY) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const sendResult = await resend.emails.send({
-          from: process.env.EMAIL_FROM || "CloudOps <onboarding@resend.dev>",
-          to: normalizedEmail,
-          subject: `You've been invited to CloudOps Orchestrator as ${assignedRole.toUpperCase()}`,
-          html: emailHtml,
-        });
-
-        if (sendResult.error) {
-          logger.error("Resend delivery returned error:", sendResult.error);
-          emailErrorMessage = sendResult.error.message || "Failed to deliver email";
-        } else {
-          emailSent = true;
-          logger.info(`Invitation email sent successfully to ${normalizedEmail}`);
-        }
-      } catch (mailErr) {
-        logger.error("Resend exception during inviteUser:", mailErr);
-        emailErrorMessage = mailErr.message || "Error communicating with email service";
-      }
-    } else {
-      emailErrorMessage = "RESEND_API_KEY is not configured";
-    }
+    const emailSent = emailResult.success;
+    const emailErrorMessage = emailResult.error || null;
 
     // Create Audit Log
     try {
