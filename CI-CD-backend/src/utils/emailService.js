@@ -10,8 +10,10 @@ import logger from "../config/logger.js";
  * Returns { success, messageId, error, isSandboxRestriction, provider }
  */
 export const sendEmail = async ({ to, subject, html, text }) => {
-  const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD;
+  const rawSmtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
+  const smtpUser = rawSmtpUser ? rawSmtpUser.trim() : null;
+  const rawSmtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD;
+  const smtpPass = rawSmtpPass ? rawSmtpPass.replace(/\s+/g, "") : null;
   const smtpHost = process.env.SMTP_HOST || (smtpUser && smtpUser.includes("@gmail.com") ? "smtp.gmail.com" : null);
 
   // Strategy 1: SMTP / Gmail (Can send to ANY email address in the world)
