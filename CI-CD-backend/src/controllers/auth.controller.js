@@ -230,6 +230,7 @@ export const forgotPassword = async (req, res) => {
           emailSent: false,
           isSandboxRestriction: true,
           resetUrl,
+          diagnostics: emailResult.diagnostics,
           message: "Resend Free Tier test restriction: email only delivers to royalkhurana1@gmail.com. In testing mode, you can use the direct reset link below.",
         });
       }
@@ -241,6 +242,7 @@ export const forgotPassword = async (req, res) => {
 
       return res.status(500).json({
         success: false,
+        diagnostics: emailResult.diagnostics,
         message: `Email could not be delivered: ${emailResult.error}`,
       });
     }
@@ -248,6 +250,7 @@ export const forgotPassword = async (req, res) => {
     return res.status(200).json({
       success: true,
       emailSent: true,
+      diagnostics: emailResult.diagnostics,
       message: "Password reset link sent to your email",
     });
   } catch (error) {

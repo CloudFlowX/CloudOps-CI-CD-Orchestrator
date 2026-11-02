@@ -16,8 +16,17 @@ export const sendEmail = async ({ to, subject, html, text }) => {
   const smtpPass = rawSmtpPass ? rawSmtpPass.replace(/\s+/g, "") : null;
   const smtpHost = process.env.SMTP_HOST || (smtpUser && smtpUser.includes("@gmail.com") ? "smtp.gmail.com" : null);
 
+  const diagnostics = {
+    hasSmtpUser: !!smtpUser,
+    hasSmtpPass: !!smtpPass,
+    smtpUser: smtpUser ? `${smtpUser.slice(0, 3)}***@${smtpUser.split('@')[1] || 'gmail.com'}` : null,
+    providerAttempted: null,
+    smtpError: null,
+  };
+
   // Strategy 1: SMTP / Gmail (Can send to ANY email address in the world)
   if (smtpHost && smtpUser && smtpPass) {
+    diagnostics.providerAttempted = "smtp";
     try {
       const isGmail = smtpUser.includes("@gmail.com") || smtpHost === "smtp.gmail.com";
       const transporter = nodemailer.createTransport(
@@ -50,17 +59,21 @@ export const sendEmail = async ({ to, subject, html, text }) => {
       });
 
       logger.info(`Email sent via SMTP to ${to} (MessageId: ${info.messageId})`);
-      return { success: true, messageId: info.messageId, provider: "smtp" };
+      return { success: true, messageId: info.messageId, provider: "smtp", diagnostics };
     } catch (smtpErr) {
       logger.error(`SMTP delivery failed for ${to}:`, smtpErr);
-      if (!process.env.RESEND_API_KEY) {
-        return { success: false, error: smtpErr.message, provider: "smtp" };
-      }
-      logger.info("Attempting fallback to Resend...");
+      diagnostics.smtpError = smtpErr.message;
+      return {
+        success: false,
+        error: `SMTP error: ${smtpErr.message}`,
+        provider: "smtp",
+        diagnostics,
+      };
     }
   }
 
-  // Strategy 2: Resend API
+  // Strategy 2: Resend API (Fallback if SMTP credentials are not in environment)
+  diagnostics.providerAttempted = "resend";
   if (process.env.RESEND_API_KEY) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
@@ -90,11 +103,12 @@ export const sendEmail = async ({ to, subject, html, text }) => {
           error: errorMsg,
           isSandboxRestriction,
           provider: "resend",
+          diagnostics,
         };
       }
 
       logger.info(`Email dispatched via Resend to ${to} (Id: ${sendResult.data?.id})`);
-      return { success: true, messageId: sendResult.data?.id, provider: "resend" };
+      return { success: true, messageId: sendResult.data?.id, provider: "resend", diagnostics };
     } catch (resendErr) {
       const errorMsg = resendErr.message || "Resend connection error";
       const isSandboxRestriction =
@@ -108,6 +122,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
         error: errorMsg,
         isSandboxRestriction,
         provider: "resend",
+        diagnostics,
       };
     }
   }
@@ -117,6 +132,7 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     success: false,
     error: "No email service configured on the server",
     provider: "none",
+    diagnostics,
   };
 };
 
