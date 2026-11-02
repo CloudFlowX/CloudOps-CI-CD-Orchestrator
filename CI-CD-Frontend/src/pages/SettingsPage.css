@@ -408,17 +408,30 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .input-with-icon .input-icon {
   position: absolute;
-  left: 12px;
-  color: var(--text-muted);
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted, #94a3b8);
   pointer-events: none;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.input-with-icon .form-input {
-  padding-left: 38px;
+.input-with-icon .form-input,
+.input-with-icon input {
+  padding-left: 42px !important;
+}
+
+.input-with-icon.has-action-right .form-input,
+.input-with-icon.has-action-right input {
+  padding-right: 42px !important;
 }
 
 .input-suffix-wrapper {

@@ -926,6 +926,7 @@ export default function SettingsPage() {
                           onChange={(e) => setProfile({ ...profile, fullName: e.target.value })}
                           className="form-input"
                           placeholder="Your Full Name"
+                          style={{ paddingLeft: '42px' }}
                           required
                         />
                       </div>
@@ -942,6 +943,7 @@ export default function SettingsPage() {
                           onChange={(e) => setProfile({ ...profile, email: e.target.value })}
                           className="form-input"
                           placeholder="your.email@example.com"
+                          style={{ paddingLeft: '42px' }}
                           required
                         />
                       </div>
@@ -950,7 +952,7 @@ export default function SettingsPage() {
 
                     <div className="form-group">
                       <label className="form-label">New Password</label>
-                      <div className="input-with-icon" style={{ position: 'relative' }}>
+                      <div className="input-with-icon has-action-right" style={{ position: 'relative' }}>
                         <Lock size={16} className="input-icon" />
                         <input
                           type={showPassword ? 'text' : 'password'}
@@ -958,6 +960,7 @@ export default function SettingsPage() {
                           value={profile.password}
                           onChange={(e) => setProfile({ ...profile, password: e.target.value })}
                           className="form-input"
+                          style={{ paddingLeft: '42px', paddingRight: '42px' }}
                           minLength={6}
                         />
                         <button
@@ -974,7 +977,7 @@ export default function SettingsPage() {
 
                     <div className="form-group">
                       <label className="form-label">Confirm New Password</label>
-                      <div className="input-with-icon" style={{ position: 'relative' }}>
+                      <div className="input-with-icon has-action-right" style={{ position: 'relative' }}>
                         <Lock size={16} className="input-icon" />
                         <input
                           type={showConfirmPassword ? 'text' : 'password'}
@@ -982,6 +985,7 @@ export default function SettingsPage() {
                           value={profile.confirmPassword}
                           onChange={(e) => setProfile({ ...profile, confirmPassword: e.target.value })}
                           className="form-input"
+                          style={{ paddingLeft: '42px', paddingRight: '42px' }}
                           disabled={!profile.password}
                         />
                         <button
@@ -1041,6 +1045,7 @@ export default function SettingsPage() {
                           value={general.orgName}
                           onChange={(e) => setGeneral({ ...general, orgName: e.target.value })}
                           placeholder="e.g. CloudOps Inc."
+                          style={{ paddingLeft: '42px' }}
                           required
                         />
                       </div>
@@ -1057,6 +1062,7 @@ export default function SettingsPage() {
                           value={general.defaultBranch}
                           onChange={(e) => setGeneral({ ...general, defaultBranch: e.target.value })}
                           placeholder="e.g. main"
+                          style={{ paddingLeft: '42px' }}
                           required
                         />
                       </div>
