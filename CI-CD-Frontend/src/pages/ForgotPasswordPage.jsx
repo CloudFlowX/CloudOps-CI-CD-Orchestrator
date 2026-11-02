@@ -142,9 +142,19 @@ function ForgotPasswordPage() {
                   <h3 style={{ fontSize: '18px', color: '#fff', marginBottom: '8px' }}>Reset Link Generated</h3>
                   
                   <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '8px', padding: '12px', textAlign: 'left', marginBottom: '16px', fontSize: '12px', color: '#FCD34D', lineHeight: '1.5' }}>
-                    <strong>Notice:</strong> Resend Free Tier (<code>onboarding@resend.dev</code>) only delivers test emails to <strong>royalkhurana1@gmail.com</strong>.
-                    <br />
-                    Since this request is for <strong>{email}</strong>, you can use the direct reset link below to proceed immediately!
+                    {deliveryInfo.error && (deliveryInfo.error.toLowerCase().includes('smtp') || deliveryInfo.error.toLowerCase().includes('timeout')) ? (
+                      <>
+                        <strong>Notice:</strong> Cloud host (Render) blocks outbound direct SMTP ports to prevent spam.
+                        <br />
+                        Your secure password reset link has been generated. Click the button below to reset your password immediately:
+                      </>
+                    ) : (
+                      <>
+                        <strong>Notice:</strong> Resend Free Tier (<code>onboarding@resend.dev</code>) only delivers test emails to <strong>royalkhurana1@gmail.com</strong>.
+                        <br />
+                        Since this request is for <strong>{email}</strong>, you can use the direct reset link below to proceed immediately!
+                      </>
+                    )}
                   </div>
 
                   {deliveryInfo.resetUrl && (

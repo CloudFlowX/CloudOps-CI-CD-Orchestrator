@@ -222,28 +222,18 @@ export const forgotPassword = async (req, res) => {
     if (!emailResult.success) {
       logger.warn(`Password reset email delivery issue for ${user.email}: ${emailResult.error}`);
 
-      // If failed due to Resend sandbox domain restriction (only royalkhurana1@gmail.com allowed):
-      // Return the direct reset link so the user is never blocked while testing!
-      if (emailResult.isSandboxRestriction) {
-        return res.status(200).json({
-          success: true,
-          emailSent: false,
-          isSandboxRestriction: true,
-          resetUrl,
-          diagnostics: emailResult.diagnostics,
-          message: "Resend Free Tier test restriction: email only delivers to royalkhurana1@gmail.com. In testing mode, you can use the direct reset link below.",
-        });
-      }
-
-      // If genuine unexpected failure
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpire = undefined;
-      await user.save({ validateBeforeSave: false });
-
-      return res.status(500).json({
-        success: false,
+      // Return 200 with the active resetUrl so the user can immediately reset their password
+      // without being blocked by cloud host network policies (e.g. Render blocking SMTP ports)
+      return res.status(200).json({
+        success: true,
+        emailSent: false,
+        isSandboxRestriction: emailResult.isSandboxRestriction,
+        resetUrl,
         diagnostics: emailResult.diagnostics,
-        message: `Email could not be delivered: ${emailResult.error}`,
+        error: emailResult.error,
+        message: emailResult.isSandboxRestriction
+          ? "Resend Free Tier test restriction: email only delivers to royalkhurana1@gmail.com. In testing mode, you can use the direct reset link below."
+          : `Email delivery issue: ${emailResult.error}. Use direct reset link below.`,
       });
     }
 

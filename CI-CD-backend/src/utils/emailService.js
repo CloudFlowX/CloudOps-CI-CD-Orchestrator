@@ -4,8 +4,9 @@ import logger from "../config/logger.js";
 
 /**
  * Universal Email Delivery Service:
- * 1. Uses SMTP/Gmail if SMTP_USER or GMAIL_USER is configured in .env (Sends to ANY email, no domain required).
- * 2. Uses Resend API if RESEND_API_KEY is configured in .env.
+ * 1. Brevo HTTPS API (Port 443 - NEVER blocked by cloud hosts like Render)
+ * 2. SMTP / Gmail with 4s timeout (Works on Localhost/VPS where ports 465/587 are open)
+ * 3. Resend API (Port 443 HTTPS)
  * 
  * Returns { success, messageId, error, isSandboxRestriction, provider }
  */
@@ -19,12 +20,54 @@ export const sendEmail = async ({ to, subject, html, text }) => {
   const diagnostics = {
     hasSmtpUser: !!smtpUser,
     hasSmtpPass: !!smtpPass,
-    smtpUser: smtpUser ? `${smtpUser.slice(0, 3)}***@${smtpUser.split('@')[1] || 'gmail.com'}` : null,
+    hasBrevoKey: !!process.env.BREVO_API_KEY,
+    hasResendKey: !!process.env.RESEND_API_KEY,
     providerAttempted: null,
     smtpError: null,
   };
 
-  // Strategy 1: SMTP / Gmail (Can send to ANY email address in the world)
+  // Strategy 1: Brevo HTTPS REST API (Port 443 - 100% allowed on Render free tier, sends to ANY recipient)
+  if (process.env.BREVO_API_KEY) {
+    diagnostics.providerAttempted = "brevo";
+    try {
+      const senderEmail = process.env.BREVO_SENDER || smtpUser || "royalkhurana1@gmail.com";
+      const senderName = process.env.BREVO_SENDER_NAME || "CloudOps Orchestrator";
+
+      const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "api-key": process.env.BREVO_API_KEY.trim(),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email: to }],
+          subject,
+          htmlContent: html,
+        }),
+      });
+
+      const brevoData = await brevoRes.json();
+
+      if (!brevoRes.ok) {
+        logger.error(`Brevo delivery failed for ${to}:`, brevoData);
+        return {
+          success: false,
+          error: brevoData.message || "Brevo delivery failed",
+          provider: "brevo",
+          diagnostics,
+        };
+      }
+
+      logger.info(`Email sent via Brevo HTTPS API to ${to} (MessageId: ${brevoData.messageId})`);
+      return { success: true, messageId: brevoData.messageId, provider: "brevo", diagnostics };
+    } catch (brevoErr) {
+      logger.error(`Brevo HTTPS exception for ${to}:`, brevoErr);
+    }
+  }
+
+  // Strategy 2: SMTP / Gmail (Quick 4s attempt, works on localhost/VPS where SMTP ports are not blocked)
   if (smtpHost && smtpUser && smtpPass) {
     diagnostics.providerAttempted = "smtp";
     try {
@@ -37,15 +80,21 @@ export const sendEmail = async ({ to, subject, html, text }) => {
                 user: smtpUser,
                 pass: smtpPass,
               },
+              connectionTimeout: 4000,
+              greetingTimeout: 4000,
+              socketTimeout: 5000,
             }
           : {
               host: smtpHost,
-              port: Number(process.env.SMTP_PORT) || 465,
-              secure: Number(process.env.SMTP_PORT) === 465 || !process.env.SMTP_PORT,
+              port: Number(process.env.SMTP_PORT) || 587,
+              secure: Number(process.env.SMTP_PORT) === 465,
               auth: {
                 user: smtpUser,
                 pass: smtpPass,
               },
+              connectionTimeout: 4000,
+              greetingTimeout: 4000,
+              socketTimeout: 5000,
             }
       );
 
@@ -61,18 +110,12 @@ export const sendEmail = async ({ to, subject, html, text }) => {
       logger.info(`Email sent via SMTP to ${to} (MessageId: ${info.messageId})`);
       return { success: true, messageId: info.messageId, provider: "smtp", diagnostics };
     } catch (smtpErr) {
-      logger.error(`SMTP delivery failed for ${to}:`, smtpErr);
+      logger.warn(`SMTP delivery failed for ${to} (often blocked by cloud hosts like Render):`, smtpErr.message);
       diagnostics.smtpError = smtpErr.message;
-      return {
-        success: false,
-        error: `SMTP error: ${smtpErr.message}`,
-        provider: "smtp",
-        diagnostics,
-      };
     }
   }
 
-  // Strategy 2: Resend API (Fallback if SMTP credentials are not in environment)
+  // Strategy 3: Resend API (Port 443 HTTPS)
   diagnostics.providerAttempted = "resend";
   if (process.env.RESEND_API_KEY) {
     try {
@@ -127,10 +170,14 @@ export const sendEmail = async ({ to, subject, html, text }) => {
     }
   }
 
-  logger.warn("No email service configured (neither SMTP nor RESEND_API_KEY found).");
+  const errorReason = diagnostics.smtpError
+    ? `Render blocked outbound SMTP port (${diagnostics.smtpError})`
+    : "No email service configured on the server";
+
+  logger.warn(errorReason);
   return {
     success: false,
-    error: "No email service configured on the server",
+    error: errorReason,
     provider: "none",
     diagnostics,
   };
