@@ -220,28 +220,23 @@ export const forgotPassword = async (req, res) => {
     });
 
     if (!emailResult.success) {
-      logger.warn(`Password reset email delivery issue for ${user.email}: ${emailResult.error}`);
+      logger.error(`Password reset email delivery failed for ${user.email}: ${emailResult.error}`);
 
-      // Return 200 with the active resetUrl so the user can immediately reset their password
-      // without being blocked by cloud host network policies (e.g. Render blocking SMTP ports)
-      return res.status(200).json({
-        success: true,
-        emailSent: false,
-        isSandboxRestriction: emailResult.isSandboxRestriction,
-        resetUrl,
-        diagnostics: emailResult.diagnostics,
-        error: emailResult.error,
-        message: emailResult.isSandboxRestriction
-          ? "Resend Free Tier test restriction: email only delivers to royalkhurana1@gmail.com. In testing mode, you can use the direct reset link below."
-          : `Email delivery issue: ${emailResult.error}. Use direct reset link below.`,
+      // Security: Clean up the token so invalid/undelivered tokens don't remain active in DB
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      return res.status(500).json({
+        success: false,
+        message: `Failed to deliver email: ${emailResult.error}`,
       });
     }
 
+    // Security: NEVER leak the reset token or URL in the response
     return res.status(200).json({
       success: true,
-      emailSent: true,
-      diagnostics: emailResult.diagnostics,
-      message: "Password reset link sent to your email",
+      message: "If an account with that email exists, a password reset link has been sent.",
     });
   } catch (error) {
     logger.error("========== FORGOT PASSWORD ERROR ==========");
